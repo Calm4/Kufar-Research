@@ -7,7 +7,7 @@ crons = ["*/10 * * * *"]
 
 [[kv_namespaces]]
 binding = "KUFAR_KV"
-id = "REPLACE_WITH_KV_NAMESPACE_ID"
+id = "8a39304eed8f4d44bda2f3c1edae581b"
 
 [vars]
 SEARCH_URL = "https://re.kufar.by/l/gomel/snyat/kvartiru?cur=USD&size=30"
