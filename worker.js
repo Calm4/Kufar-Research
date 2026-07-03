@@ -75,6 +75,10 @@ async function fetchSearchHtml(searchUrl) {
       Accept:
         "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
     },
+    // Kufar is itself behind Cloudflare — without this, cron polls could
+    // be served a cached copy of the search page instead of the freshest
+    // one, adding extra delay on top of the polling interval.
+    cf: { cacheTtl: 0, cacheEverything: false },
   });
   const html = await res.text();
   return { status: res.status, html };
