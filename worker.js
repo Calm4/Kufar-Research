@@ -401,6 +401,9 @@ export default {
             `scheduled: status=${result.status} found=${result.foundIds.length} new=${result.newIds.length} firstRun=${result.firstRun} telegramErrors=${result.telegramErrors.length}` +
               (result.newIds.length > 0 ? ` newIds=[${result.newIds.join(",")}]` : "")
           );
+          if (result.blocked) {
+            console.error(`scheduled blocked, body sample: ${(result.htmlSample || "").slice(0, 500)}`);
+          }
           if (result.telegramErrors.length > 0) {
             console.error(`scheduled telegram errors: ${result.telegramErrors.join(" | ")}`);
           }
