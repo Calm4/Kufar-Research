@@ -6,7 +6,7 @@ compatibility_date = "2024-01-01"
 enabled = true
 
 [triggers]
-crons = ["*/3 * * * *"]
+crons = ["*/10 * * * *"]
 
 [[kv_namespaces]]
 binding = "KUFAR_KV"
@@ -15,7 +15,6 @@ id = "8a39304eed8f4d44bda2f3c1edae581b"
 [vars]
 SEARCH_URL = "https://re.kufar.by/l/gomel/snyat/kvartiru?cur=USD&size=30"
 MAX_SEEN_IDS = "800"
-SELF_URL = "https://kufarresearch.calm4.workers.dev/"
 
 # Secrets (NOT stored here — set via `wrangler secret put`):
 #   TELEGRAM_BOT_TOKEN
