@@ -22,6 +22,51 @@ function extractAds(html) {
   return byId; // id -> path
 }
 
+// Standalone debug helper: shows what real ad markup looks like (price,
+// rooms, address) so extractAds/formatting logic can be extended to parse
+// them without guessing blind. Does not touch KV or Telegram.
+function extractDebugInfo(html) {
+  const unescaped = html.replace(/\\\//g, "/");
+
+  const nextDataMatch = unescaped.match(
+    /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i
+  );
+
+  const idRegex = new RegExp(AD_LINK_RE.source, AD_LINK_RE.flags);
+  const firstAdMatch = idRegex.exec(unescaped);
+
+  let cardSnippet = null;
+  if (firstAdMatch) {
+    const start = Math.max(0, firstAdMatch.index - 1500);
+    const end = Math.min(unescaped.length, firstAdMatch.index + 1500);
+    cardSnippet = unescaped.slice(start, end);
+  }
+
+  return {
+    hasNextData: !!nextDataMatch,
+    nextDataLength: nextDataMatch ? nextDataMatch[1].length : 0,
+    nextDataSample: nextDataMatch ? nextDataMatch[1].slice(0, 4000) : null,
+    cardSnippet,
+  };
+}
+
+function formatDebugReport(debug) {
+  const lines = [];
+  lines.push("Kufar monitor — debug (без записи в KV и без Telegram)");
+  lines.push(`__NEXT_DATA__ найден: ${debug.hasNextData ? "да" : "нет"}`);
+  if (debug.hasNextData) {
+    lines.push(`Размер __NEXT_DATA__: ${debug.nextDataLength} байт`);
+    lines.push("Первые 4000 символов __NEXT_DATA__:");
+    lines.push(debug.nextDataSample);
+  }
+  lines.push("");
+  lines.push(
+    "Фрагмент HTML вокруг первой найденной ссылки на объявление (±1500 символов):"
+  );
+  lines.push(debug.cardSnippet ?? "(ссылка не найдена)");
+  return lines.join("\n");
+}
+
 async function fetchSearchHtml(searchUrl) {
   const res = await fetch(searchUrl, {
     headers: {
@@ -167,6 +212,21 @@ export default {
   },
 
   async fetch(request, env) {
+    const url = new URL(request.url);
+    if (url.searchParams.get("debug") === "1") {
+      const { status, html } = await fetchSearchHtml(env.SEARCH_URL);
+      if (status !== 200) {
+        return new Response(
+          `HTTP статус: ${status}\n\n${html.slice(0, 2000)}`,
+          { headers: { "Content-Type": "text/plain; charset=utf-8" } }
+        );
+      }
+      const debug = extractDebugInfo(html);
+      return new Response(formatDebugReport(debug), {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
     const result = await runMonitor(env);
     return new Response(formatReport(result), {
       headers: { "Content-Type": "text/plain; charset=utf-8" },
