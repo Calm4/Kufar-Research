@@ -313,8 +313,12 @@ async function runMonitor(env) {
     }
   }
 
-  const updatedSeen = [...(seenIds ?? []), ...foundIds.filter((id) => !seenSet.has(id))];
-  await saveSeenIds(env.KUFAR_KV, updatedSeen, maxSeenIds);
+  // Only write to KV when the seen set actually changes — keeps well
+  // within the free-tier daily write quota even at a tight poll interval.
+  if (firstRun || newIds.length > 0) {
+    const updatedSeen = firstRun ? foundIds : [...seenIds, ...newIds];
+    await saveSeenIds(env.KUFAR_KV, updatedSeen, maxSeenIds);
+  }
 
   return {
     status,
@@ -384,6 +388,32 @@ export default {
 
   async fetch(request, env) {
     const url = new URL(request.url);
+
+    // Self-service test helper: drops the last N ids from seen_ids so the
+    // next cron tick (or a manual reload of the plain URL) treats them as
+    // "new" again and sends real Telegram notifications for them — lets
+    // you test the full pipeline without asking anyone to edit KV by hand.
+    const resetLastParam = url.searchParams.get("resetLast");
+    if (resetLastParam !== null) {
+      const n = Math.max(1, Number(resetLastParam) || 5);
+      const seenIds = (await getSeenIds(env.KUFAR_KV)) ?? [];
+      const removed = seenIds.slice(-n);
+      const remaining = seenIds.slice(0, Math.max(0, seenIds.length - n));
+      await env.KUFAR_KV.put("seen_ids", JSON.stringify(remaining));
+      const lines = [
+        `Удалено из seen_ids: ${removed.length}`,
+        removed.join(", ") || "(база была пуста)",
+        "",
+        `Осталось в базе: ${remaining.length}`,
+        "Дальше ничего нажимать не нужно — на ближайшем крон-тике (раз в 3 минуты)",
+        "эти id снова будут найдены на сайте и уйдут как «новые» уведомления в Telegram.",
+        "Если хочешь проверить сразу, не дожидаясь крона — открой обычную ссылку (без параметров).",
+      ];
+      return new Response(lines.join("\n"), {
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    }
+
     if (url.searchParams.get("debug") === "1") {
       const { status, html } = await fetchSearchHtml(env.SEARCH_URL);
       if (status !== 200) {
