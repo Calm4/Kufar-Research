@@ -394,7 +394,21 @@ function formatReport(result) {
 
 export default {
   async scheduled(event, env, ctx) {
-    ctx.waitUntil(runMonitor(env));
+    ctx.waitUntil(
+      runMonitor(env)
+        .then((result) => {
+          console.log(
+            `scheduled: status=${result.status} found=${result.foundIds.length} new=${result.newIds.length} firstRun=${result.firstRun} telegramErrors=${result.telegramErrors.length}` +
+              (result.newIds.length > 0 ? ` newIds=[${result.newIds.join(",")}]` : "")
+          );
+          if (result.telegramErrors.length > 0) {
+            console.error(`scheduled telegram errors: ${result.telegramErrors.join(" | ")}`);
+          }
+        })
+        .catch((err) => {
+          console.error(`scheduled run threw: ${err && err.stack ? err.stack : err}`);
+        })
+    );
   },
 
   async fetch(request, env) {
