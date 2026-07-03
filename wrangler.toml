@@ -1,0 +1,17 @@
+name = "kufar-rental-monitor"
+main = "worker.js"
+compatibility_date = "2024-11-01"
+
+[triggers]
+crons = ["*/10 * * * *"]
+
+[[kv_namespaces]]
+binding = "KUFAR_KV"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"
+
+[vars]
+SEARCH_URL = "https://re.kufar.by/l/gomel/snyat/kvartiru?cur=USD&size=30"
+
+# Secrets (do NOT put them here, set via `wrangler secret put`):
+#   TELEGRAM_BOT_TOKEN
+#   TELEGRAM_CHAT_ID
