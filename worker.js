@@ -394,6 +394,26 @@ function formatReport(result) {
 
 export default {
   async scheduled(event, env, ctx) {
+    // Cron Triggers appear to execute from a Cloudflare colo/IP pool that
+    // Kufar blocks (confirmed via logs: cron-triggered fetches to Kufar
+    // get a 403 "Доступ ограничен" page, while the same code triggered by
+    // a normal HTTP request to this worker gets 200). Route through a
+    // self-fetch instead of calling runMonitor() directly, so the actual
+    // Kufar request happens inside a regular fetch-triggered invocation.
+    if (env.SELF_URL) {
+      ctx.waitUntil(
+        fetch(env.SELF_URL, { cf: { cacheTtl: 0, cacheEverything: false } })
+          .then((res) => res.text())
+          .then((text) => {
+            console.log(`scheduled via self-fetch: ${text.split("\n").slice(0, 4).join(" | ")}`);
+          })
+          .catch((err) => {
+            console.error(`scheduled self-fetch threw: ${err && err.stack ? err.stack : err}`);
+          })
+      );
+      return;
+    }
+
     ctx.waitUntil(
       runMonitor(env)
         .then((result) => {
