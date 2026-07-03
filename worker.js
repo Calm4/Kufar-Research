@@ -78,9 +78,12 @@ function buildAdDetails(ad) {
   const address = getParamValue(ad.account_parameters, "address");
 
   let priceUsd = null;
+  let priceByn = null;
   if (Array.isArray(ad.calculator)) {
     const usd = ad.calculator.find((c) => c.currency === "USD");
     if (usd && usd.price != null) priceUsd = Number(usd.price) / 100;
+    const byn = ad.calculator.find((c) => c.currency === "BYN");
+    if (byn && byn.price != null) priceByn = Number(byn.price) / 100;
   }
 
   let distanceKm = null;
@@ -92,6 +95,7 @@ function buildAdDetails(ad) {
     id,
     link: ad.ad_link || `https://re.kufar.by/vi/${id}`,
     priceUsd,
+    priceByn,
     rooms,
     address: address || null,
     distanceKm,
@@ -134,6 +138,7 @@ function extractAds(html) {
         id,
         link: `https://re.kufar.by${path}`,
         priceUsd: null,
+        priceByn: null,
         rooms: null,
         address: null,
         distanceKm: null,
@@ -267,7 +272,13 @@ function classifyHotness(ad) {
 function formatAdMessage(ad) {
   const circle = classifyHotness(ad);
   const parts = [];
-  if (ad.priceUsd != null) parts.push(`${ad.priceUsd.toFixed(0)}$`);
+  if (ad.priceByn != null && ad.priceUsd != null) {
+    parts.push(`${ad.priceByn.toFixed(0)}р(${ad.priceUsd.toFixed(0)}$)`);
+  } else if (ad.priceByn != null) {
+    parts.push(`${ad.priceByn.toFixed(0)}р`);
+  } else if (ad.priceUsd != null) {
+    parts.push(`${ad.priceUsd.toFixed(0)}$`);
+  }
   if (ad.rooms != null) parts.push(`${ad.rooms} комн.`);
   if (ad.distanceKm != null) parts.push(`${ad.distanceKm.toFixed(1)} км до центра`);
 
