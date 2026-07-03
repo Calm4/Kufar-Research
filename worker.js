@@ -22,31 +22,37 @@ function extractAds(html) {
   return byId; // id -> path
 }
 
-// Standalone debug helper: shows what real ad markup looks like (price,
-// rooms, address) so extractAds/formatting logic can be extended to parse
-// them without guessing blind. Does not touch KV or Telegram.
+// Standalone debug helper: shows what real ad data looks like (price,
+// rooms, address) inside __NEXT_DATA__ so extractAds/formatting logic can
+// be extended to parse them without guessing blind. Does not touch KV or
+// Telegram.
 function extractDebugInfo(html) {
   const unescaped = html.replace(/\\\//g, "/");
 
   const nextDataMatch = unescaped.match(
     /<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i
   );
+  const nextData = nextDataMatch ? nextDataMatch[1] : null;
 
   const idRegex = new RegExp(AD_LINK_RE.source, AD_LINK_RE.flags);
   const firstAdMatch = idRegex.exec(unescaped);
+  const firstAdId = firstAdMatch ? firstAdMatch[2] : null;
 
-  let cardSnippet = null;
-  if (firstAdMatch) {
-    const start = Math.max(0, firstAdMatch.index - 1500);
-    const end = Math.min(unescaped.length, firstAdMatch.index + 1500);
-    cardSnippet = unescaped.slice(start, end);
+  let adJsonSnippet = null;
+  if (nextData && firstAdId) {
+    const idPos = nextData.indexOf(firstAdId);
+    if (idPos !== -1) {
+      const start = Math.max(0, idPos - 300);
+      const end = Math.min(nextData.length, idPos + 3500);
+      adJsonSnippet = nextData.slice(start, end);
+    }
   }
 
   return {
-    hasNextData: !!nextDataMatch,
-    nextDataLength: nextDataMatch ? nextDataMatch[1].length : 0,
-    nextDataSample: nextDataMatch ? nextDataMatch[1].slice(0, 4000) : null,
-    cardSnippet,
+    hasNextData: !!nextData,
+    nextDataLength: nextData ? nextData.length : 0,
+    firstAdId,
+    adJsonSnippet,
   };
 }
 
@@ -56,14 +62,11 @@ function formatDebugReport(debug) {
   lines.push(`__NEXT_DATA__ найден: ${debug.hasNextData ? "да" : "нет"}`);
   if (debug.hasNextData) {
     lines.push(`Размер __NEXT_DATA__: ${debug.nextDataLength} байт`);
-    lines.push("Первые 4000 символов __NEXT_DATA__:");
-    lines.push(debug.nextDataSample);
   }
+  lines.push(`Первый найденный id объявления: ${debug.firstAdId ?? "не найден"}`);
   lines.push("");
-  lines.push(
-    "Фрагмент HTML вокруг первой найденной ссылки на объявление (±1500 символов):"
-  );
-  lines.push(debug.cardSnippet ?? "(ссылка не найдена)");
+  lines.push("Кусок __NEXT_DATA__ вокруг этого id (±300/3500 символов):");
+  lines.push(debug.adJsonSnippet ?? "(не найдено — id не встречается в __NEXT_DATA__ как есть)");
   return lines.join("\n");
 }
 
