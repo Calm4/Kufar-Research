@@ -67,11 +67,13 @@ export function formatAdMessage(ad: AdDetails): string {
     parts.push(`${ad.priceByn.toFixed(0)}р`);
   } else if (ad.priceUsd != null) {
     parts.push(`${ad.priceUsd.toFixed(0)}$`);
+  } else {
+    parts.push("цена не указана");
   }
   if (ad.rooms != null) parts.push(`${ad.rooms} комн.`);
   if (ad.distanceKm != null) parts.push(`${ad.distanceKm.toFixed(1)} км до центра`);
 
-  const lines = [`${circle} ${parts.join(", ") || "Новое объявление"}`];
+  const lines = [`${circle} ${parts.join(", ")}`];
   if (ad.address) lines.push(ad.address);
   lines.push(ad.link);
   return lines.join("\n");

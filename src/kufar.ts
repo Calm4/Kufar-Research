@@ -49,17 +49,19 @@ function buildAdDetails(ad: Record<string, unknown>): AdDetails {
   const coords = getParamValue(ad.ad_parameters, "coordinates") as [number, number] | null; // [lng, lat]
   const address = getParamValue(ad.account_parameters, "address") as string | null;
 
+  // Kufar uses price: 0 as a sentinel for "not specified"/"by agreement",
+  // not an actual free rental — treat it the same as missing.
   let priceUsd: number | null = null;
   let priceByn: number | null = null;
   if (Array.isArray(ad.calculator)) {
     const usd = ad.calculator.find((c) => c && (c as Record<string, unknown>).currency === "USD") as
       | Record<string, unknown>
       | undefined;
-    if (usd && usd.price != null) priceUsd = Number(usd.price) / 100;
+    if (usd && usd.price != null && Number(usd.price) > 0) priceUsd = Number(usd.price) / 100;
     const byn = ad.calculator.find((c) => c && (c as Record<string, unknown>).currency === "BYN") as
       | Record<string, unknown>
       | undefined;
-    if (byn && byn.price != null) priceByn = Number(byn.price) / 100;
+    if (byn && byn.price != null && Number(byn.price) > 0) priceByn = Number(byn.price) / 100;
   }
 
   let distanceKm: number | null = null;

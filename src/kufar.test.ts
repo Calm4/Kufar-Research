@@ -36,6 +36,24 @@ test("extractAds parses a real-shaped __NEXT_DATA__ payload", () => {
   assert.ok(ad?.distanceKm !== null && ad!.distanceKm! < 1);
 });
 
+test("extractAds treats price: 0 (Kufar's 'not specified' sentinel) as no price", () => {
+  const adWithoutPrice = {
+    ...sampleAd,
+    ad_id: 999,
+    ad_link: "https://re.kufar.by/vi/gomel/snyat/kvartiru/999",
+    calculator: [
+      { currency: "USD", price: 0 },
+      { currency: "BYN", price: 0 },
+    ],
+  };
+  const html = nextDataHtml([adWithoutPrice]);
+  const ads = extractAds(html);
+  const ad = ads.get("999");
+  assert.ok(ad);
+  assert.equal(ad?.priceUsd, null);
+  assert.equal(ad?.priceByn, null);
+});
+
 test("extractAds dedupes repeated ad_id entries", () => {
   const html = nextDataHtml([sampleAd, sampleAd]);
   const ads = extractAds(html);

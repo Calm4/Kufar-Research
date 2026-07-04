@@ -48,7 +48,8 @@ test("formatAdMessage shows BYN(USD) when both prices present", () => {
   assert.match(msg, /2\.7 км до центра/);
 });
 
-test("formatAdMessage falls back to 'Новое объявление' with no data", () => {
-  const msg = formatAdMessage(ad());
-  assert.match(msg, /Новое объявление/);
+test("formatAdMessage shows 'цена не указана' instead of blank/zero when price is missing", () => {
+  const msg = formatAdMessage(ad({ rooms: 2 }));
+  assert.match(msg, /цена не указана/);
+  assert.doesNotMatch(msg, /\b0р|\b0\$/);
 });
