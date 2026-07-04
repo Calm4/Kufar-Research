@@ -1,18 +1,18 @@
 name = "kufarresearch"
-main = "worker.js"
+main = "src/index.ts"
 compatibility_date = "2024-01-01"
 
-# The single scheduler for this project. A GitHub Actions poller was tried
-# instead of this earlier, but its `schedule` trigger never actually fired on
-# its own (confirmed via the GitHub API — only ever one manual
-# workflow_dispatch run, zero automatic runs). This Cron Trigger was
-# previously removed because Kufar was blocking Cloudflare's cron IP pool
-# with 403s, but that block isn't currently in effect (recent scheduled()
-# runs got a real 200). If `scheduled blocked` errors show up again in
-# Observability logs, that block is back — see STATUS.md for the history
-# and what to try next.
-[triggers]
-crons = ["*/5 * * * *"]
+# No [triggers] here on purpose. Both Cloudflare Cron Trigger and the
+# GitHub Actions `schedule` trigger were tried as the scheduler for this
+# project and both turned out to have their own failure mode:
+#   - GitHub Actions `schedule` never once fired automatically (confirmed
+#     via the GitHub API — only a manual workflow_dispatch run existed).
+#   - Cloudflare Cron Trigger runs from a distinct colo/IP pool that Kufar
+#     has intermittently 403-blocked.
+# The scheduler now lives entirely outside Cloudflare/GitHub: an external
+# free service (cron-job.org or similar) hits this Worker's public URL on
+# a schedule, indistinguishable from a normal visitor request. See
+# STATUS.md for the full history and exact setup steps.
 
 [observability]
 enabled = true
@@ -26,5 +26,9 @@ SEARCH_URL = "https://re.kufar.by/l/gomel/snyat/kvartiru?cur=USD&size=30"
 MAX_SEEN_IDS = "800"
 
 # Secrets (NOT stored here — set via `wrangler secret put`):
-#   TELEGRAM_BOT_TOKEN
-#   TELEGRAM_CHAT_ID
+#   TELEGRAM_BOT_TOKEN  — Telegram bot token
+#   TELEGRAM_CHAT_ID    — chat/channel id the bot posts to
+#   ADMIN_TOKEN         — required as ?token=... on every request (see
+#                         src/index.ts) so random visitors with the URL
+#                         can't trigger polls, read /status, or reset
+#                         seen_ids. Pick any long random string.
