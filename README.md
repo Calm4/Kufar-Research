@@ -1,9 +1,8 @@
 # Kufar rental monitor
 
 Мониторинг новых объявлений об аренде квартир на Kufar (re.kufar.by) с
-уведомлениями в Telegram. Cloudflare Worker, опрос каждые 5 минут (и
-Cloudflare Cron Trigger, и GitHub Actions параллельно — см. STATUS.md),
-состояние (просмотренные id) — в Workers KV.
+уведомлениями в Telegram. Cloudflare Worker, Cloudflare Cron Trigger
+опрашивает раз в 5 минут, состояние (просмотренные id) — в Workers KV.
 
 ## Деплой
 
