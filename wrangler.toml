@@ -2,6 +2,19 @@ name = "kufarresearch"
 main = "worker.js"
 compatibility_date = "2024-01-01"
 
+# Re-enabled after discovering the GitHub Actions poller's `schedule` trigger
+# never actually fired on its own (checked via the GitHub API — only the one
+# manual workflow_dispatch run existed, zero automatic runs after 30+ minutes).
+# With no Cloudflare Cron Trigger either, nothing was polling in the
+# background at all. Recent scheduled() runs (logged before this trigger was
+# removed) got a real 200 from Kufar, so the earlier IP-pool block seems to
+# not be in effect right now — running this in parallel with the GitHub
+# Actions workflow gives two independent pollers instead of relying on one
+# unproven scheduler. If Kufar starts blocking cron IPs again, look for
+# `scheduled blocked` errors in Observability logs.
+[triggers]
+crons = ["*/5 * * * *"]
+
 [observability]
 enabled = true
 
