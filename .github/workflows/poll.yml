@@ -1,0 +1,14 @@
+name: Poll Kufar monitor
+
+on:
+  schedule:
+    - cron: "*/5 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  poll:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Hit the worker and print its report
+        run: |
+          curl -sS -w "\nHTTP_STATUS:%{http_code}\n" "https://kufarresearch.calm4.workers.dev/"
