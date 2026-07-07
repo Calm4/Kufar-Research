@@ -57,6 +57,13 @@ test("empty rooms array is treated as no filter", () => {
   assert.equal(matchesFilter(ad({ rooms: 7 }), sub({ rooms: [] })), true);
 });
 
+test("rooms bucket 4 ('4+') matches 4, 5, and more rooms", () => {
+  const subscriber = sub({ rooms: [4] });
+  assert.equal(matchesFilter(ad({ rooms: 4 }), subscriber), true);
+  assert.equal(matchesFilter(ad({ rooms: 6 }), subscriber), true);
+  assert.equal(matchesFilter(ad({ rooms: 3 }), subscriber), false);
+});
+
 test("combined price and rooms filter: both must pass", () => {
   const subscriber = sub({ minPrice: 100, maxPrice: 300, rooms: [1, 2] });
   assert.equal(matchesFilter(ad({ priceUsd: 200, rooms: 2 }), subscriber), true);

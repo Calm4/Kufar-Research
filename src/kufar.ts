@@ -49,17 +49,25 @@ function buildAdDetails(ad: Record<string, unknown>): AdDetails {
   const coords = getParamValue(ad.ad_parameters, "coordinates") as [number, number] | null; // [lng, lat]
   const address = getParamValue(ad.account_parameters, "address") as string | null;
 
+  // Kufar represents "Договорная" (negotiable, no fixed price) as price: 0
+  // rather than omitting the field — treat non-positive as "no price", not
+  // as a real $0/р0 listing.
+  function positivePrice(raw: unknown): number | null {
+    const n = Number(raw);
+    return Number.isFinite(n) && n > 0 ? n / 100 : null;
+  }
+
   let priceUsd: number | null = null;
   let priceByn: number | null = null;
   if (Array.isArray(ad.calculator)) {
     const usd = ad.calculator.find((c) => c && (c as Record<string, unknown>).currency === "USD") as
       | Record<string, unknown>
       | undefined;
-    if (usd && usd.price != null) priceUsd = Number(usd.price) / 100;
+    if (usd && usd.price != null) priceUsd = positivePrice(usd.price);
     const byn = ad.calculator.find((c) => c && (c as Record<string, unknown>).currency === "BYN") as
       | Record<string, unknown>
       | undefined;
-    if (byn && byn.price != null) priceByn = Number(byn.price) / 100;
+    if (byn && byn.price != null) priceByn = positivePrice(byn.price);
   }
 
   let distanceKm: number | null = null;
