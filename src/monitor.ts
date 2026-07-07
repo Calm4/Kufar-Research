@@ -25,7 +25,9 @@ export interface MonitorResult {
 
 export async function runMonitor(env: Env): Promise<MonitorResult> {
   const maxSeenIds = Number(env.MAX_SEEN_IDS) || DEFAULT_MAX_SEEN_IDS;
-  const subscribers = await getSubscribers(env.KUFAR_KV);
+  // Paused subscribers (unsubscribed via the toggle) keep their filters in
+  // KV but don't count towards delivery — same as if they weren't there.
+  const subscribers = (await getSubscribers(env.KUFAR_KV)).filter((s) => s.active !== false);
   const { status, html } = await fetchSearchHtml(env.SEARCH_URL);
 
   if (status !== 200) {

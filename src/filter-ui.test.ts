@@ -4,7 +4,11 @@ import {
   buildFiltersKeyboard,
   describeFilters,
   findPriceBucketByKey,
+  isActiveSubscriber,
+  mainMenuKeyboard,
   roomLabel,
+  SUBSCRIBE_BUTTON,
+  UNSUBSCRIBE_BUTTON,
 } from "./filter-ui";
 import type { Subscriber } from "./subscribers";
 
@@ -78,4 +82,32 @@ test("buildFiltersKeyboard: always includes a reset button", () => {
   const kb = buildFiltersKeyboard(sub());
   const flat = kb.inline_keyboard.flat();
   assert.ok(flat.some((b) => b.callback_data === "reset"));
+});
+
+test("isActiveSubscriber: null, active:false, and active-by-default cases", () => {
+  assert.equal(isActiveSubscriber(null), false);
+  assert.equal(isActiveSubscriber(sub({ active: false })), false);
+  assert.equal(isActiveSubscriber(sub()), true);
+  assert.equal(isActiveSubscriber(sub({ active: true })), true);
+});
+
+test("mainMenuKeyboard: shows the subscribe button when not subscribed", () => {
+  const kb = mainMenuKeyboard(null);
+  const labels = kb.keyboard.flat();
+  assert.ok(labels.includes(SUBSCRIBE_BUTTON));
+  assert.ok(!labels.includes(UNSUBSCRIBE_BUTTON));
+});
+
+test("mainMenuKeyboard: shows the unsubscribe button when actively subscribed", () => {
+  const kb = mainMenuKeyboard(sub());
+  const labels = kb.keyboard.flat();
+  assert.ok(labels.includes(UNSUBSCRIBE_BUTTON));
+  assert.ok(!labels.includes(SUBSCRIBE_BUTTON));
+});
+
+test("mainMenuKeyboard: shows the subscribe button again once paused (active: false)", () => {
+  const kb = mainMenuKeyboard(sub({ active: false }));
+  const labels = kb.keyboard.flat();
+  assert.ok(labels.includes(SUBSCRIBE_BUTTON));
+  assert.ok(!labels.includes(UNSUBSCRIBE_BUTTON));
 });

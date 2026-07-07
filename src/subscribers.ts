@@ -5,6 +5,9 @@ export interface PriceRange {
 
 export interface Subscriber {
   chatId: string;
+  // Undefined/true = receiving notifications; false = paused via the
+  // subscribe/unsubscribe toggle, filters kept for when they turn it back on.
+  active?: boolean;
   priceRanges?: PriceRange[];
   rooms?: number[];
 }
@@ -35,6 +38,7 @@ function normalize(raw: unknown): Subscriber[] {
       subscriber.priceRanges = [{ min: e.minPrice as number | undefined, max: e.maxPrice as number | undefined }];
     }
     if (Array.isArray(e.rooms)) subscriber.rooms = e.rooms as number[];
+    if (typeof e.active === "boolean") subscriber.active = e.active;
 
     result.push(subscriber);
   }
@@ -60,13 +64,23 @@ async function saveSubscribers(kv: KVNamespace, subscribers: Subscriber[]): Prom
   await kv.put(SUBSCRIBERS_KEY, JSON.stringify(subscribers));
 }
 
-// Adds a subscriber with no filters if not already present. Returns true if
-// newly added, false if that chat id was already subscribed.
+// Creates a subscriber (no filters) if chatId is new, or re-activates one
+// that had previously paused notifications — their filters are untouched
+// either way. Returns true if this call actually changed anything (new
+// subscriber or reactivation), false if they were already active.
 export async function addSubscriber(kv: KVNamespace, chatId: string): Promise<boolean> {
   const subscribers = await getSubscribers(kv);
-  if (subscribers.some((s) => s.chatId === chatId)) return false;
-  await saveSubscribers(kv, [...subscribers, { chatId }]);
-  return true;
+  const idx = subscribers.findIndex((s) => s.chatId === chatId);
+  if (idx < 0) {
+    await saveSubscribers(kv, [...subscribers, { chatId }]);
+    return true;
+  }
+  if (subscribers[idx].active === false) {
+    subscribers[idx] = { ...subscribers[idx], active: true };
+    await saveSubscribers(kv, subscribers);
+    return true;
+  }
+  return false;
 }
 
 // Creates the subscriber if missing, then applies the given field updates.

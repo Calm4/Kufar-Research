@@ -16,6 +16,15 @@ export interface ReplyKeyboard {
 
 export const FILTERS_BUTTON = "🔍 Фильтры";
 export const CLEAR_FILTERS_BUTTON = "♻️ Сбросить фильтры";
+export const SUBSCRIBE_BUTTON = "🔔 Подписаться на уведомления";
+export const UNSUBSCRIBE_BUTTON = "🔕 Отписаться от уведомлений";
+
+// The menu's top button is one toggle, not two separate ones — its label
+// (and what tapping it does) depends on whether the subscriber currently
+// has notifications on.
+export function isActiveSubscriber(subscriber: Subscriber | null): boolean {
+  return subscriber != null && subscriber.active !== false;
+}
 
 // Room counts of 4+ are a single bucket (see filters.ts::roomBucket) — the
 // button list mirrors that, so "4+" is one toggle, not four.
@@ -100,9 +109,10 @@ export function buildFiltersKeyboard(subscriber: Subscriber): InlineKeyboard {
   };
 }
 
-export function mainMenuKeyboard(): ReplyKeyboard {
+export function mainMenuKeyboard(subscriber: Subscriber | null): ReplyKeyboard {
+  const toggleButton = isActiveSubscriber(subscriber) ? UNSUBSCRIBE_BUTTON : SUBSCRIBE_BUTTON;
   return {
-    keyboard: [[FILTERS_BUTTON], [CLEAR_FILTERS_BUTTON]],
+    keyboard: [[toggleButton], [FILTERS_BUTTON], [CLEAR_FILTERS_BUTTON]],
     resize_keyboard: true,
   };
 }

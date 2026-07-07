@@ -6,9 +6,12 @@ import {
   describeFilters,
   filtersMessageText,
   findPriceBucketByKey,
+  isActiveSubscriber,
   mainMenuKeyboard,
   FILTERS_BUTTON,
   CLEAR_FILTERS_BUTTON,
+  SUBSCRIBE_BUTTON,
+  UNSUBSCRIBE_BUTTON,
 } from "./filter-ui";
 
 interface TelegramUpdate {
@@ -57,26 +60,41 @@ interface CommandReply {
 }
 
 async function handleCommand(env: Env, chatId: string, text: string): Promise<CommandReply> {
-  if (text.startsWith("/start")) {
-    const isNew = await addSubscriber(env.KUFAR_KV, chatId);
+  if (text.startsWith(SUBSCRIBE_BUTTON) || text.startsWith("/start")) {
+    const changed = await addSubscriber(env.KUFAR_KV, chatId);
+    const s = await getSubscriber(env.KUFAR_KV, chatId);
     return {
-      text: isNew
-        ? "Подписка оформлена — сюда будут приходить новые объявления с Kufar.\n\n" +
+      text: changed
+        ? "Подписка активна — сюда будут приходить новые объявления с Kufar.\n\n" +
           "Настроить фильтры можно кнопкой «🔍 Фильтры» внизу, либо командами /price и /rooms."
         : "Вы уже подписаны. Кнопка «🔍 Фильтры» внизу — посмотреть/изменить фильтры.",
-      markup: mainMenuKeyboard(),
+      markup: mainMenuKeyboard(s),
+    };
+  }
+
+  if (text.startsWith(UNSUBSCRIBE_BUTTON) || text.startsWith("/stop")) {
+    const existing = await getSubscriber(env.KUFAR_KV, chatId);
+    if (!isActiveSubscriber(existing)) {
+      return { text: "Вы и так не подписаны.", markup: mainMenuKeyboard(existing) };
+    }
+    const s = await updateSubscriber(env.KUFAR_KV, chatId, { active: false });
+    return {
+      text:
+        "Уведомления отключены. Фильтры сохранены — в любой момент можно снова " +
+        "включить их кнопкой «🔔 Подписаться на уведомления» внизу.",
+      markup: mainMenuKeyboard(s),
     };
   }
 
   if (text.startsWith(FILTERS_BUTTON) || text.startsWith("/filters")) {
     const s = await getSubscriber(env.KUFAR_KV, chatId);
-    if (!s) return { text: "Вы ещё не подписаны — нажмите /start.", markup: mainMenuKeyboard() };
+    if (!s) return { text: "Вы ещё не подписаны — нажмите /start.", markup: mainMenuKeyboard(null) };
     return { text: filtersMessageText(s), markup: buildFiltersKeyboard(s) };
   }
 
   if (text.startsWith(CLEAR_FILTERS_BUTTON) || text.startsWith("/clearfilters")) {
     const existing = await getSubscriber(env.KUFAR_KV, chatId);
-    if (!existing) return { text: "Вы ещё не подписаны — нажмите /start.", markup: mainMenuKeyboard() };
+    if (!existing) return { text: "Вы ещё не подписаны — нажмите /start.", markup: mainMenuKeyboard(null) };
     const s = await updateSubscriber(env.KUFAR_KV, chatId, {
       priceRanges: undefined,
       rooms: undefined,
@@ -87,10 +105,11 @@ async function handleCommand(env: Env, chatId: string, text: string): Promise<Co
   if (text.startsWith("/price")) {
     const parsed = parsePriceCommand(text);
     if (parsed === null) {
+      const s = await getSubscriber(env.KUFAR_KV, chatId);
       return {
         text: "Формат: /price 100-300 (в $), либо /price off, чтобы снять фильтр по цене.\n" +
           "Это заменяет все выбранные кнопками диапазоны одним своим.",
-        markup: mainMenuKeyboard(),
+        markup: mainMenuKeyboard(s),
       };
     }
     const s =
@@ -103,9 +122,10 @@ async function handleCommand(env: Env, chatId: string, text: string): Promise<Co
   if (text.startsWith("/rooms")) {
     const parsed = parseRoomsCommand(text);
     if (parsed === null) {
+      const s = await getSubscriber(env.KUFAR_KV, chatId);
       return {
         text: "Формат: /rooms 1,2,3 (через запятую; 4 значит «4 и больше»), либо /rooms off.",
-        markup: mainMenuKeyboard(),
+        markup: mainMenuKeyboard(s),
       };
     }
     const s =
@@ -115,9 +135,10 @@ async function handleCommand(env: Env, chatId: string, text: string): Promise<Co
     return { text: `Фильтр по комнатам сохранён.\n\n${describeFilters(s)}`, markup: buildFiltersKeyboard(s) };
   }
 
+  const s = await getSubscriber(env.KUFAR_KV, chatId);
   return {
-    text: "Команды: /start, /price 100-300, /rooms 1,2, /filters, /clearfilters — или кнопки внизу.",
-    markup: mainMenuKeyboard(),
+    text: "Команды: /start, /stop, /price 100-300, /rooms 1,2, /filters, /clearfilters — или кнопки внизу.",
+    markup: mainMenuKeyboard(s),
   };
 }
 
