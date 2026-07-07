@@ -3,8 +3,9 @@ import type { AdDetails } from "./hotness";
 import { formatAdMessage } from "./hotness";
 import { fetchSearchHtml } from "./fetcher";
 import { extractAds } from "./kufar";
-import { sendTelegramMessage } from "./telegram";
+import { broadcastTelegramMessage } from "./telegram";
 import { getSeenIds, saveSeenIds, saveLastRunStatus } from "./state";
+import { getSubscribers } from "./subscribers";
 
 const DEFAULT_MAX_SEEN_IDS = 800;
 
@@ -18,10 +19,12 @@ export interface MonitorResult {
   htmlSample: string | null;
   telegramErrors: string[];
   blocked: boolean;
+  subscriberCount: number;
 }
 
 export async function runMonitor(env: Env): Promise<MonitorResult> {
   const maxSeenIds = Number(env.MAX_SEEN_IDS) || DEFAULT_MAX_SEEN_IDS;
+  const subscribers = await getSubscribers(env.KUFAR_KV);
   const { status, html } = await fetchSearchHtml(env.SEARCH_URL);
 
   if (status !== 200) {
@@ -33,6 +36,7 @@ export async function runMonitor(env: Env): Promise<MonitorResult> {
       firstRun: false,
       blocked: true,
       telegramErrorCount: 0,
+      subscriberCount: subscribers.length,
     });
     return {
       status,
@@ -44,6 +48,7 @@ export async function runMonitor(env: Env): Promise<MonitorResult> {
       htmlSample: html.slice(0, 2000),
       telegramErrors: [],
       blocked: true,
+      subscriberCount: subscribers.length,
     };
   }
 
@@ -59,11 +64,8 @@ export async function runMonitor(env: Env): Promise<MonitorResult> {
   for (const id of newIds) {
     const ad = adsById.get(id);
     if (!ad) continue;
-    try {
-      await sendTelegramMessage(env, formatAdMessage(ad));
-    } catch (err) {
-      telegramErrors.push(`${id}: ${err instanceof Error ? err.message : String(err)}`);
-    }
+    const errors = await broadcastTelegramMessage(env, subscribers, formatAdMessage(ad));
+    telegramErrors.push(...errors.map((e) => `${id}: ${e}`));
   }
 
   // Only write seen_ids when the set actually changes — keeps well within
@@ -81,6 +83,7 @@ export async function runMonitor(env: Env): Promise<MonitorResult> {
     firstRun,
     blocked: false,
     telegramErrorCount: telegramErrors.length,
+    subscriberCount: subscribers.length,
   });
 
   return {
@@ -93,6 +96,7 @@ export async function runMonitor(env: Env): Promise<MonitorResult> {
     htmlSample: foundIds.length === 0 ? html.slice(0, 2000) : null,
     telegramErrors,
     blocked: false,
+    subscriberCount: subscribers.length,
   };
 }
 
@@ -111,6 +115,7 @@ export function formatReport(result: MonitorResult): string {
   }
 
   lines.push(`Найдено объявлений: ${result.foundIds.length}`);
+  lines.push(`Подписчиков: ${result.subscriberCount}${result.subscriberCount === 0 ? " (никто не жал /start у бота)" : ""}`);
 
   if (result.firstRun) {
     lines.push(

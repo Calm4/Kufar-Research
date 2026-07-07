@@ -10,16 +10,18 @@
 
 ```
 src/
-  env.ts       — типы окружения (Env)
-  hotness.ts   — чистая логика: haversine, оценка "горячести", формат сообщения
-  kufar.ts     — чистый парсинг HTML/__NEXT_DATA__ (без сети)
-  fetcher.ts   — единственное место с сетевым fetch() к Kufar
-  telegram.ts  — отправка в Telegram (с одним ретраем)
-  state.ts     — чтение/запись KV (seen_ids, last_run, авторизация)
-  monitor.ts   — оркестрация: fetch → parse → diff → notify → save
-  debug.ts     — форматирование /?debug=1 отчёта
-  index.ts     — Worker entry (роутинг, HTTP)
-  *.test.ts    — тесты на чистую логику (Node test runner)
+  env.ts             — типы окружения (Env)
+  hotness.ts         — чистая логика: haversine, оценка "горячести", формат сообщения
+  kufar.ts           — чистый парсинг HTML/__NEXT_DATA__ (без сети)
+  fetcher.ts         — единственное место с сетевым fetch() к Kufar
+  telegram.ts        — отправка в Telegram (с одним ретраем), рассылка по подписчикам
+  subscribers.ts     — чтение/запись списка подписчиков в KV
+  telegram-webhook.ts — обработка входящих апдейтов от Telegram (/start → подписка)
+  state.ts           — чтение/запись KV (seen_ids, last_run, авторизация)
+  monitor.ts         — оркестрация: fetch → parse → diff → notify → save
+  debug.ts           — форматирование /?debug=1 отчёта
+  index.ts           — Worker entry (роутинг, HTTP)
+  *.test.ts          — тесты на чистую логику (Node test runner)
 ```
 
 ## Деплой
@@ -42,15 +44,13 @@ src/
 
    ```bash
    npx wrangler secret put TELEGRAM_BOT_TOKEN
-   npx wrangler secret put TELEGRAM_CHAT_ID
    npx wrangler secret put ADMIN_TOKEN
    ```
 
-   - `TELEGRAM_CHAT_ID` — id чата/канала, куда бот должен писать (бот должен
-     быть туда добавлен и иметь право отправлять сообщения).
    - `ADMIN_TOKEN` — любая длинная случайная строка. **Обязателен на каждый
      запрос** (`?token=...`) — без него Worker отвечает `401`. Это защищает
-     `/`, `/status`, `/?debug=1` и `/?resetLast=N` от посторонних с URL.
+     `/`, `/status`, `/?debug=1`, `/?resetLast=N` и `/telegram-webhook` от
+     посторонних с URL.
 
 4. При необходимости поменяй `SEARCH_URL` в `wrangler.toml` (город,
    валюта, размер страницы и т.д.).
@@ -63,6 +63,29 @@ src/
 
    Либо просто запушь в `main` — настроен автодеплой через Cloudflare
    Workers Builds (Git-интеграция).
+
+## Подписка через /start (обязательно, иначе никто не получит уведомлений)
+
+Бот никого не знает по умолчанию — уведомления получают только те, кто хоть
+раз написал ему `/start`. Раньше был один жёстко заданный `TELEGRAM_CHAT_ID`;
+теперь это список подписчиков в KV (`src/subscribers.ts`), и добавляет в него
+только реальный `/start`.
+
+Чтобы это заработало, нужно один раз зарегистрировать webhook — иначе
+Telegram просто не будет присылать Worker'у входящие сообщения:
+
+```bash
+curl "https://api.telegram.org/bot<TELEGRAM_BOT_TOKEN>/setWebhook?url=https://kufarresearch.calm4.workers.dev/telegram-webhook?token=<ADMIN_TOKEN>"
+```
+
+После этого:
+
+1. Открой бота в Telegram, нажми `/start` (или отправь `/start` вручную).
+2. Бот должен ответить подтверждением подписки.
+3. Каждый, кто так сделает, начнёт получать уведомления о новых объявлениях.
+
+Проверить, что webhook зарегистрирован: `.../getWebhookInfo` (тем же
+токеном бота) — поле `url` должно совпадать с адресом выше.
 
 ## Настройка планировщика (обязательно, иначе фон не работает)
 

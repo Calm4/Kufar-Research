@@ -27,8 +27,14 @@ MAX_SEEN_IDS = "800"
 
 # Secrets (NOT stored here — set via `wrangler secret put`):
 #   TELEGRAM_BOT_TOKEN  — Telegram bot token
-#   TELEGRAM_CHAT_ID    — chat/channel id the bot posts to
 #   ADMIN_TOKEN         — required as ?token=... on every request (see
 #                         src/index.ts) so random visitors with the URL
 #                         can't trigger polls, read /status, or reset
-#                         seen_ids. Pick any long random string.
+#                         seen_ids. Pick any long random string. Also
+#                         embedded in the Telegram webhook URL (see
+#                         README.md) so Telegram's POSTs pass the same
+#                         check as every other request.
+#
+# Who gets notified is no longer a fixed secret — anyone who messages
+# /start to the bot is added to the "subscribers" list in KV (see
+# src/subscribers.ts) and gets every subsequent new-listing broadcast.

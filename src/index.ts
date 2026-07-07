@@ -4,6 +4,7 @@ import { extractDebugInfo } from "./kufar";
 import { formatDebugReport } from "./debug";
 import { runMonitor, formatReport } from "./monitor";
 import { getSeenIds, getLastRunStatus, isAuthorized } from "./state";
+import { handleTelegramWebhook } from "./telegram-webhook";
 
 function unauthorized(): Response {
   return new Response("401 Unauthorized — missing or wrong ?token=\n", {
@@ -25,6 +26,13 @@ export default {
 
     if (!isAuthorized(env, url)) return unauthorized();
 
+    // Telegram calls this on every incoming message once the webhook is
+    // registered (see README.md). It's what turns /start into a stored
+    // subscription instead of silently going nowhere.
+    if (request.method === "POST" && url.pathname === "/telegram-webhook") {
+      return handleTelegramWebhook(request, env);
+    }
+
     // Read-only: last run's summary, so you can check "is this actually
     // running" without digging through Cloudflare Observability logs.
     if (url.pathname === "/status") {
@@ -38,6 +46,7 @@ export default {
           `HTTP статус: ${lastRun.status}${lastRun.blocked ? " (заблокировано)" : ""}`,
           `Найдено: ${lastRun.foundCount}, новых: ${lastRun.newCount}, firstRun: ${lastRun.firstRun}`,
           `Ошибок Telegram: ${lastRun.telegramErrorCount}`,
+          `Подписчиков: ${lastRun.subscriberCount}`,
         ].join("\n")
       );
     }

@@ -24,6 +24,7 @@ export interface RunStatus {
   firstRun: boolean;
   blocked: boolean;
   telegramErrorCount: number;
+  subscriberCount: number;
 }
 
 // Written on every run (success or blocked) so `/status` always reflects
