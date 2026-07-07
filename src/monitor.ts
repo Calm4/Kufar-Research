@@ -6,6 +6,7 @@ import { extractAds } from "./kufar";
 import { broadcastTelegramMessage } from "./telegram";
 import { getSeenIds, saveSeenIds, saveLastRunStatus } from "./state";
 import { getSubscribers } from "./subscribers";
+import { matchesFilter } from "./filters";
 
 const DEFAULT_MAX_SEEN_IDS = 800;
 
@@ -64,7 +65,8 @@ export async function runMonitor(env: Env): Promise<MonitorResult> {
   for (const id of newIds) {
     const ad = adsById.get(id);
     if (!ad) continue;
-    const errors = await broadcastTelegramMessage(env, subscribers, formatAdMessage(ad));
+    const recipients = subscribers.filter((s) => matchesFilter(ad, s)).map((s) => s.chatId);
+    const errors = await broadcastTelegramMessage(env, recipients, formatAdMessage(ad));
     telegramErrors.push(...errors.map((e) => `${id}: ${e}`));
   }
 
