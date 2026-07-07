@@ -78,8 +78,7 @@ async function handleCommand(env: Env, chatId: string, text: string): Promise<Co
     const existing = await getSubscriber(env.KUFAR_KV, chatId);
     if (!existing) return { text: "Вы ещё не подписаны — нажмите /start.", markup: mainMenuKeyboard() };
     const s = await updateSubscriber(env.KUFAR_KV, chatId, {
-      minPrice: undefined,
-      maxPrice: undefined,
+      priceRanges: undefined,
       rooms: undefined,
     });
     return { text: `Все фильтры сброшены.\n\n${describeFilters(s)}`, markup: buildFiltersKeyboard(s) };
@@ -89,14 +88,15 @@ async function handleCommand(env: Env, chatId: string, text: string): Promise<Co
     const parsed = parsePriceCommand(text);
     if (parsed === null) {
       return {
-        text: "Формат: /price 100-300 (в $), либо /price off, чтобы снять фильтр по цене.",
+        text: "Формат: /price 100-300 (в $), либо /price off, чтобы снять фильтр по цене.\n" +
+          "Это заменяет все выбранные кнопками диапазоны одним своим.",
         markup: mainMenuKeyboard(),
       };
     }
     const s =
       parsed === "off"
-        ? await updateSubscriber(env.KUFAR_KV, chatId, { minPrice: undefined, maxPrice: undefined })
-        : await updateSubscriber(env.KUFAR_KV, chatId, { minPrice: parsed.min, maxPrice: parsed.max });
+        ? await updateSubscriber(env.KUFAR_KV, chatId, { priceRanges: undefined })
+        : await updateSubscriber(env.KUFAR_KV, chatId, { priceRanges: [{ min: parsed.min, max: parsed.max }] });
     return { text: `Фильтр по цене сохранён.\n\n${describeFilters(s)}`, markup: buildFiltersKeyboard(s) };
   }
 
@@ -136,16 +136,28 @@ async function handleCallbackQuery(
   const chatIdStr = String(chatId);
 
   if (data === "reset") {
-    await updateSubscriber(env.KUFAR_KV, chatIdStr, { minPrice: undefined, maxPrice: undefined, rooms: undefined });
+    await updateSubscriber(env.KUFAR_KV, chatIdStr, { priceRanges: undefined, rooms: undefined });
   } else if (data.startsWith("room:")) {
     const n = Number(data.slice("room:".length));
     const current = (await getSubscriber(env.KUFAR_KV, chatIdStr))?.rooms ?? [];
     const next = current.includes(n) ? current.filter((x) => x !== n) : [...current, n].sort((a, b) => a - b);
     await updateSubscriber(env.KUFAR_KV, chatIdStr, { rooms: next.length > 0 ? next : undefined });
   } else if (data.startsWith("price:")) {
-    const bucket = findPriceBucketByKey(data.slice("price:".length));
-    if (bucket) {
-      await updateSubscriber(env.KUFAR_KV, chatIdStr, { minPrice: bucket.min, maxPrice: bucket.max });
+    const key = data.slice("price:".length);
+    if (key === "any") {
+      // "Любая цена" means "no price filter" — picking it clears every
+      // other selected bucket rather than toggling alongside them.
+      await updateSubscriber(env.KUFAR_KV, chatIdStr, { priceRanges: undefined });
+    } else {
+      const bucket = findPriceBucketByKey(key);
+      if (bucket) {
+        const current = (await getSubscriber(env.KUFAR_KV, chatIdStr))?.priceRanges ?? [];
+        const exists = current.some((r) => r.min === bucket.min && r.max === bucket.max);
+        const next = exists
+          ? current.filter((r) => !(r.min === bucket.min && r.max === bucket.max))
+          : [...current, { min: bucket.min, max: bucket.max }];
+        await updateSubscriber(env.KUFAR_KV, chatIdStr, { priceRanges: next.length > 0 ? next : undefined });
+      }
     }
   }
 

@@ -1,23 +1,42 @@
+export interface PriceRange {
+  min?: number;
+  max?: number;
+}
+
 export interface Subscriber {
   chatId: string;
-  minPrice?: number;
-  maxPrice?: number;
+  priceRanges?: PriceRange[];
   rooms?: number[];
 }
 
 const SUBSCRIBERS_KEY = "subscribers";
 
-// Older deployments stored subscribers as a plain array of chat id strings
-// (no filters). Accept both shapes so existing KV data keeps working.
+// Older deployments stored subscribers in two prior shapes: a plain array of
+// chat id strings (no filters at all), and later `{ chatId, minPrice,
+// maxPrice, rooms }` (a single price range, before price filters became
+// multi-select). Accept all three so existing KV data keeps working.
 function normalize(raw: unknown): Subscriber[] {
   if (!Array.isArray(raw)) return [];
   const result: Subscriber[] = [];
   for (const entry of raw) {
     if (typeof entry === "string") {
       result.push({ chatId: entry });
-    } else if (entry && typeof entry === "object" && typeof (entry as { chatId?: unknown }).chatId === "string") {
-      result.push(entry as Subscriber);
+      continue;
     }
+    if (!entry || typeof entry !== "object" || typeof (entry as { chatId?: unknown }).chatId !== "string") {
+      continue;
+    }
+    const e = entry as Record<string, unknown>;
+    const subscriber: Subscriber = { chatId: e.chatId as string };
+
+    if (Array.isArray(e.priceRanges)) {
+      subscriber.priceRanges = e.priceRanges as PriceRange[];
+    } else if (e.minPrice != null || e.maxPrice != null) {
+      subscriber.priceRanges = [{ min: e.minPrice as number | undefined, max: e.maxPrice as number | undefined }];
+    }
+    if (Array.isArray(e.rooms)) subscriber.rooms = e.rooms as number[];
+
+    result.push(subscriber);
   }
   return result;
 }

@@ -44,8 +44,13 @@ export function findPriceBucketByKey(key: string): PriceBucket | undefined {
   return PRICE_BUCKETS.find((b) => b.key === key);
 }
 
-function selectedPriceBucketKey(subscriber: Subscriber): string | undefined {
-  return PRICE_BUCKETS.find((b) => b.min === subscriber.minPrice && b.max === subscriber.maxPrice)?.key;
+// "Любая цена" isn't a real range — it just means "no price filter", so it
+// reads as selected exactly when there's nothing else selected.
+function isPriceBucketSelected(subscriber: Subscriber, bucket: PriceBucket): boolean {
+  if (bucket.key === "any") {
+    return !subscriber.priceRanges || subscriber.priceRanges.length === 0;
+  }
+  return (subscriber.priceRanges ?? []).some((r) => r.min === bucket.min && r.max === bucket.max);
 }
 
 function chunk<T>(items: T[], size: number): T[][] {
@@ -54,10 +59,19 @@ function chunk<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
+function formatPriceRange(range: { min?: number; max?: number }): string {
+  const bucket = PRICE_BUCKETS.find((b) => b.key !== "any" && b.min === range.min && b.max === range.max);
+  if (bucket) return bucket.label;
+  if (range.min != null && range.max != null) return `${range.min}–${range.max} $`;
+  if (range.min != null) return `от ${range.min} $`;
+  if (range.max != null) return `до ${range.max} $`;
+  return "любая";
+}
+
 export function describeFilters(s: Subscriber): string {
   const parts: string[] = [];
-  if (s.minPrice != null || s.maxPrice != null) {
-    parts.push(`Цена: ${s.minPrice ?? "любая"}–${s.maxPrice ?? "любая"} $`);
+  if (s.priceRanges != null && s.priceRanges.length > 0) {
+    parts.push(`Цена: ${s.priceRanges.map(formatPriceRange).join(", ")}`);
   }
   if (s.rooms != null && s.rooms.length > 0) {
     parts.push(`Комнат: ${s.rooms.map(roomLabel).join(", ")}`);
@@ -76,9 +90,8 @@ export function buildFiltersKeyboard(subscriber: Subscriber): InlineKeyboard {
     callback_data: `room:${n}`,
   }));
 
-  const selectedPriceKey = selectedPriceBucketKey(subscriber);
   const priceButtons: InlineButton[] = PRICE_BUCKETS.map((b) => ({
-    text: `${selectedPriceKey === b.key ? "✅ " : ""}${b.label}`,
+    text: `${isPriceBucketSelected(subscriber, b) ? "✅ " : ""}${b.label}`,
     callback_data: `price:${b.key}`,
   }));
 

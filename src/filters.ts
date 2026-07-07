@@ -14,11 +14,12 @@ export function roomBucket(rooms: number): number {
 // pass — better a false positive than silently dropping a listing because
 // the site withheld a field.
 export function matchesFilter(ad: AdDetails, subscriber: Subscriber): boolean {
-  if (subscriber.minPrice != null && ad.priceUsd != null && ad.priceUsd < subscriber.minPrice) {
-    return false;
-  }
-  if (subscriber.maxPrice != null && ad.priceUsd != null && ad.priceUsd > subscriber.maxPrice) {
-    return false;
+  if (subscriber.priceRanges != null && subscriber.priceRanges.length > 0 && ad.priceUsd != null) {
+    const price = ad.priceUsd;
+    const inAnyRange = subscriber.priceRanges.some(
+      (r) => (r.min == null || price >= r.min) && (r.max == null || price <= r.max)
+    );
+    if (!inAnyRange) return false;
   }
   if (
     subscriber.rooms != null &&

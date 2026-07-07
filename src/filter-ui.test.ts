@@ -17,9 +17,15 @@ test("describeFilters: no filters set", () => {
 });
 
 test("describeFilters: price and rooms both set", () => {
-  const text = describeFilters(sub({ minPrice: 100, maxPrice: 300, rooms: [1, 4] }));
+  const text = describeFilters(sub({ priceRanges: [{ min: 100, max: 300 }], rooms: [1, 4] }));
   assert.match(text, /100–300/);
   assert.match(text, /1, 4\+/);
+});
+
+test("describeFilters: multiple selected price buckets are listed together", () => {
+  const text = describeFilters(sub({ priceRanges: [{ max: 200 }, { min: 600 }] }));
+  assert.match(text, /до 200\$/);
+  assert.match(text, /600\$\+/);
 });
 
 test("roomLabel: 4 renders as '4+', others as-is", () => {
@@ -46,13 +52,24 @@ test("buildFiltersKeyboard: marks matching price bucket, and 'any' when no filte
   const anyButton = noFilter.inline_keyboard.flat().find((b) => b.callback_data === "price:any");
   assert.match(anyButton!.text, /^✅/);
 
-  const withFilter = buildFiltersKeyboard(sub({ minPrice: 200, maxPrice: 400 }));
+  const withFilter = buildFiltersKeyboard(sub({ priceRanges: [{ min: 200, max: 400 }] }));
   const matchingButton = withFilter.inline_keyboard.flat().find((b) => b.callback_data === "price:200-400");
   assert.match(matchingButton!.text, /^✅/);
 });
 
+test("buildFiltersKeyboard: multiple price buckets can be selected at once", () => {
+  const kb = buildFiltersKeyboard(sub({ priceRanges: [{ max: 200 }, { min: 600 }] }));
+  const flat = kb.inline_keyboard.flat();
+  const under200 = flat.find((b) => b.callback_data === "price:0-200");
+  const over600 = flat.find((b) => b.callback_data === "price:600-plus");
+  const middle = flat.find((b) => b.callback_data === "price:200-400");
+  assert.match(under200!.text, /^✅/);
+  assert.match(over600!.text, /^✅/);
+  assert.doesNotMatch(middle!.text, /^✅/);
+});
+
 test("buildFiltersKeyboard: custom price range outside any preset selects nothing", () => {
-  const kb = buildFiltersKeyboard(sub({ minPrice: 150, maxPrice: 350 }));
+  const kb = buildFiltersKeyboard(sub({ priceRanges: [{ min: 150, max: 350 }] }));
   const anySelected = kb.inline_keyboard.flat().some((b) => b.text.startsWith("✅"));
   assert.equal(anySelected, false);
 });

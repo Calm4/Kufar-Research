@@ -25,20 +25,31 @@ test("no filters set: everything passes", () => {
   assert.equal(matchesFilter(ad({ priceUsd: 999, rooms: 5 }), sub()), true);
 });
 
-test("price below minPrice is rejected", () => {
-  assert.equal(matchesFilter(ad({ priceUsd: 90 }), sub({ minPrice: 100 })), false);
+test("price below a single range's min is rejected", () => {
+  assert.equal(matchesFilter(ad({ priceUsd: 90 }), sub({ priceRanges: [{ min: 100 }] })), false);
 });
 
-test("price above maxPrice is rejected", () => {
-  assert.equal(matchesFilter(ad({ priceUsd: 400 }), sub({ maxPrice: 300 })), false);
+test("price above a single range's max is rejected", () => {
+  assert.equal(matchesFilter(ad({ priceUsd: 400 }), sub({ priceRanges: [{ max: 300 }] })), false);
 });
 
-test("price within [minPrice, maxPrice] passes", () => {
-  assert.equal(matchesFilter(ad({ priceUsd: 200 }), sub({ minPrice: 100, maxPrice: 300 })), true);
+test("price within a single [min, max] range passes", () => {
+  assert.equal(matchesFilter(ad({ priceUsd: 200 }), sub({ priceRanges: [{ min: 100, max: 300 }] })), true);
 });
 
 test("missing price always passes a price filter", () => {
-  assert.equal(matchesFilter(ad({ priceUsd: null }), sub({ minPrice: 100, maxPrice: 300 })), true);
+  assert.equal(matchesFilter(ad({ priceUsd: null }), sub({ priceRanges: [{ min: 100, max: 300 }] })), true);
+});
+
+test("multiple price ranges: price matching any one of them passes", () => {
+  const subscriber = sub({ priceRanges: [{ max: 200 }, { min: 600 }] });
+  assert.equal(matchesFilter(ad({ priceUsd: 150 }), subscriber), true);
+  assert.equal(matchesFilter(ad({ priceUsd: 700 }), subscriber), true);
+  assert.equal(matchesFilter(ad({ priceUsd: 400 }), subscriber), false);
+});
+
+test("empty priceRanges array is treated as no filter", () => {
+  assert.equal(matchesFilter(ad({ priceUsd: 999 }), sub({ priceRanges: [] })), true);
 });
 
 test("rooms filter rejects a room count not in the list", () => {
@@ -65,7 +76,7 @@ test("rooms bucket 4 ('4+') matches 4, 5, and more rooms", () => {
 });
 
 test("combined price and rooms filter: both must pass", () => {
-  const subscriber = sub({ minPrice: 100, maxPrice: 300, rooms: [1, 2] });
+  const subscriber = sub({ priceRanges: [{ min: 100, max: 300 }], rooms: [1, 2] });
   assert.equal(matchesFilter(ad({ priceUsd: 200, rooms: 2 }), subscriber), true);
   assert.equal(matchesFilter(ad({ priceUsd: 200, rooms: 3 }), subscriber), false);
   assert.equal(matchesFilter(ad({ priceUsd: 400, rooms: 2 }), subscriber), false);
