@@ -70,6 +70,12 @@ function buildAdDetails(ad: Record<string, unknown>): AdDetails {
     if (byn && byn.price != null) priceByn = positivePrice(byn.price);
   }
 
+  // Kufar provides converted BYN and USD prices per listing, but no separate
+  // exchange-rate field. Their ratio is therefore the exact rate Kufar used
+  // for this displayed price (subject to the site's cent rounding).
+  const exchangeRateBynPerUsd =
+    priceByn != null && priceUsd != null ? priceByn / priceUsd : null;
+
   let distanceKm: number | null = null;
   if (Array.isArray(coords) && coords.length === 2) {
     distanceKm = haversineKm(CITY_CENTER.lat, CITY_CENTER.lng, coords[1], coords[0]);
@@ -80,6 +86,7 @@ function buildAdDetails(ad: Record<string, unknown>): AdDetails {
     link: (ad.ad_link as string) || `https://re.kufar.by/vi/${id}`,
     priceUsd,
     priceByn,
+    exchangeRateBynPerUsd,
     rooms,
     address: address || null,
     distanceKm,
@@ -123,6 +130,7 @@ export function extractAds(html: string): Map<string, AdDetails> {
         link: `https://re.kufar.by${path}`,
         priceUsd: null,
         priceByn: null,
+        exchangeRateBynPerUsd: null,
         rooms: null,
         address: null,
         distanceKm: null,

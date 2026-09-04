@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { classifyHotness, haversineKm, formatAdMessage, CITY_CENTER, type AdDetails } from "./hotness";
+import {
+  calculateHotnessScore,
+  classifyHotness,
+  haversineKm,
+  formatAdMessage,
+  formatShortAddress,
+  CITY_CENTER,
+  type AdDetails,
+} from "./hotness";
 
 function ad(overrides: Partial<AdDetails> = {}): AdDetails {
   return {
@@ -8,6 +16,7 @@ function ad(overrides: Partial<AdDetails> = {}): AdDetails {
     link: "https://re.kufar.by/vi/1",
     priceUsd: null,
     priceByn: null,
+    exchangeRateBynPerUsd: null,
     rooms: null,
     address: null,
     distanceKm: null,
@@ -25,30 +34,61 @@ test("haversineKm gives a sane distance for 1 degree of latitude (~111km)", () =
   assert.ok(d > 100 && d < 112);
 });
 
-test("classifyHotness: cheap + close is green", () => {
-  assert.equal(classifyHotness(ad({ priceUsd: 100, rooms: 1, distanceKm: 1 })), "🟢");
+test("classifyHotness: good price + close + 2 rooms is green", () => {
+  assert.equal(classifyHotness(ad({ priceUsd: 300, rooms: 2, distanceKm: 1 })), "🟢");
 });
 
 test("classifyHotness: expensive + far is red", () => {
   assert.equal(classifyHotness(ad({ priceUsd: 900, rooms: 1, distanceKm: 20 })), "🔴");
 });
 
-test("classifyHotness: no price/distance data is white", () => {
-  assert.equal(classifyHotness(ad()), "⚪");
+test("classifyHotness: a missing price cannot get a rating", () => {
+  assert.equal(classifyHotness(ad({ rooms: 3, distanceKm: 0.5 })), "⚪");
 });
 
-test("classifyHotness: studio (0 rooms) treated as 1 room, not divide-by-zero", () => {
-  assert.equal(classifyHotness(ad({ priceUsd: 100, rooms: 0, distanceKm: 1 })), "🟢");
+test("classifyHotness: a great price remains important even far away", () => {
+  assert.equal(classifyHotness(ad({ priceUsd: 200, rooms: 1, distanceKm: 10 })), "🟡");
 });
 
-test("formatAdMessage shows BYN(USD) when both prices present", () => {
-  const msg = formatAdMessage(ad({ priceByn: 300, priceUsd: 100, rooms: 2, distanceKm: 2.7 }));
-  assert.match(msg, /300р\(100\$\)/);
-  assert.match(msg, /2 комн\./);
-  assert.match(msg, /2\.7 км до центра/);
+test("calculateHotnessScore applies 50/40/10 weights and every price boundary", () => {
+  assert.equal(calculateHotnessScore(ad({ priceUsd: 150, rooms: 2, distanceKm: 2 })), 10);
+  assert.equal(calculateHotnessScore(ad({ priceUsd: 200, rooms: 2, distanceKm: 5 })), 7);
+  assert.equal(calculateHotnessScore(ad({ priceUsd: 250, rooms: 1, distanceKm: 5 })), 5.5);
+  assert.equal(calculateHotnessScore(ad({ priceUsd: 300, rooms: 2, distanceKm: 2 })), 7);
+  assert.equal(calculateHotnessScore(ad({ priceUsd: 301, rooms: 2, distanceKm: 5 })), 3);
 });
 
-test("formatAdMessage says price isn't specified when both priceUsd and priceByn are null", () => {
+test("formatAdMessage uses a readable multiline layout with Kufar's rate", () => {
+  const msg = formatAdMessage(
+    ad({
+      priceByn: 650,
+      priceUsd: 211.09,
+      exchangeRateBynPerUsd: 650 / 211.09,
+      rooms: 2,
+      distanceKm: 2.7,
+      address: "Ильича ул, 85, Гомель",
+    })
+  );
+  assert.match(msg, /^🟡 Цена: 650 BYN \(211 USD\)$/m);
+  assert.match(msg, /^\[1\$ = 3,08Б \(по курсу Куфара\)\]$/m);
+  assert.match(msg, /^Адрес: Ильича ул, 85$/m);
+  assert.match(msg, /^Кол-во комнат: 2$/m);
+  assert.match(msg, /^Расстояние до Центра: 2,7 км$/m);
+  assert.match(msg, /^https:\/\/re\.kufar\.by\/vi\/1$/m);
+});
+
+test("formatAdMessage has readable fallbacks when rich data is missing", () => {
   const msg = formatAdMessage(ad());
-  assert.match(msg, /цена не указана/);
+  assert.match(msg, /^⚪ Цена: не указана$/m);
+  assert.match(msg, /^Адрес: не указан$/m);
+  assert.match(msg, /^Кол-во комнат: не указано$/m);
+  assert.match(msg, /^Расстояние до Центра: не рассчитано$/m);
+});
+
+test("formatShortAddress removes redundant Gomel location parts", () => {
+  assert.equal(
+    formatShortAddress("Ветковская ул, 2, Гомель, Гомельская область"),
+    "Ветковская ул, 2"
+  );
+  assert.equal(formatShortAddress("3-я Авиационная ул, Гомель"), "3-я Авиационная ул");
 });

@@ -14,7 +14,7 @@ const sampleAd = {
   ad_link: "https://re.kufar.by/vi/gomel/snyat/kvartiru/1075685401",
   ad_parameters: [
     { p: "rooms", v: "2" },
-    { p: "coordinates", v: [31.0017, 52.4245] },
+    { p: "coordinates", v: [31.003331, 52.439338] },
   ],
   account_parameters: [{ p: "address", v: "3-я Авиационная ул, 9, Гомель" }],
   calculator: [
@@ -32,6 +32,7 @@ test("extractAds parses a real-shaped __NEXT_DATA__ payload", () => {
   assert.equal(ad?.rooms, 2);
   assert.equal(ad?.priceUsd, 100);
   assert.equal(ad?.priceByn, 300);
+  assert.equal(ad?.exchangeRateBynPerUsd, 3);
   assert.equal(ad?.address, "3-я Авиационная ул, 9, Гомель");
   assert.ok(ad?.distanceKm !== null && ad!.distanceKm! < 1);
 });
@@ -69,6 +70,21 @@ test("extractAds falls back to regex when __NEXT_DATA__ is missing", () => {
   assert.ok(ads.has("123456"));
   assert.ok(ads.has("234567"));
   assert.equal(ads.get("123456")?.priceUsd, null);
+  assert.equal(ads.get("123456")?.exchangeRateBynPerUsd, null);
+});
+
+test("extractAds treats Kufar's zero-price placeholders as missing prices", () => {
+  const zeroPriceAd = {
+    ...sampleAd,
+    calculator: [
+      { currency: "USD", price: "0" },
+      { currency: "BYN", price: "0" },
+    ],
+  };
+  const parsed = extractAds(nextDataHtml([zeroPriceAd])).get("1075685401");
+  assert.equal(parsed?.priceUsd, null);
+  assert.equal(parsed?.priceByn, null);
+  assert.equal(parsed?.exchangeRateBynPerUsd, null);
 });
 
 test("extractAds returns empty map for unrecognizable HTML", () => {

@@ -10,6 +10,7 @@ function ad(overrides: Partial<AdDetails> = {}): AdDetails {
     link: "https://re.kufar.by/vi/1",
     priceUsd: null,
     priceByn: null,
+    exchangeRateBynPerUsd: null,
     rooms: null,
     address: null,
     distanceKm: null,

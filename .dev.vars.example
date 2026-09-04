@@ -1,0 +1,4 @@
+# Copy this file to .dev.vars for local end-to-end testing.
+# Never commit the real values.
+TELEGRAM_BOT_TOKEN="replace-with-a-test-bot-token"
+ADMIN_TOKEN="replace-with-a-long-random-local-token"

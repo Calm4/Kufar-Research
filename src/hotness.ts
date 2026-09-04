@@ -3,21 +3,23 @@ export interface AdDetails {
   link: string;
   priceUsd: number | null;
   priceByn: number | null;
+  exchangeRateBynPerUsd: number | null;
   rooms: number | null;
   address: string | null;
   distanceKm: number | null;
 }
 
-// Rough Gomel city-center reference point, used only to rank listings by
-// proximity for the hotness score below. Approximate — verify/adjust via
-// Google/Yandex Maps if it doesn't match your idea of "center".
-export const CITY_CENTER = { lat: 52.4245, lng: 31.0017 };
+// Универмаг «Гомель», Советская ул., 60. This is the reference point for
+// both the displayed distance and the location part of the hotness score.
+export const CITY_CENTER = { lat: 52.439338, lng: 31.003331 };
 
-// Hotness thresholds — deliberately simple and tunable. "Price per room" is
-// used instead of raw price so a cheap-but-tiny studio doesn't automatically
-// outrank a slightly pricier multi-room flat.
-export const PRICE_PER_ROOM_GREAT_USD = 120;
-export const PRICE_PER_ROOM_OK_USD = 200;
+// Hotness is deliberately weighted in this order: price (50%), distance
+// (40%), rooms (10%). The constants are kept here so preferences remain easy
+// to tune without touching the rest of the monitor.
+export const PRICE_BEST_USD = 150;
+export const PRICE_GREAT_USD = 200;
+export const PRICE_OK_USD = 250;
+export const PRICE_MAX_USD = 300;
 export const CENTER_CLOSE_KM = 2;
 export const CENTER_OK_KM = 5;
 
@@ -33,48 +35,94 @@ export function haversineKm(lat1: number, lon1: number, lat2: number, lon2: numb
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
-export function classifyHotness(ad: AdDetails): "🟢" | "🟡" | "🔴" | "⚪" {
-  let score = 0;
-  let maxScore = 0;
+export function calculateHotnessScore(ad: AdDetails): number | null {
+  // Without a real price the primary factor is unknown, so do not pretend the
+  // listing has a meaningful rating (Kufar sometimes returns zero-price ads).
+  if (ad.priceUsd == null || ad.priceUsd <= 0) return null;
 
-  if (ad.priceUsd != null && ad.rooms != null) {
-    const effectiveRooms = ad.rooms > 0 ? ad.rooms : 1;
-    const pricePerRoom = ad.priceUsd / effectiveRooms;
-    maxScore += 2;
-    if (pricePerRoom <= PRICE_PER_ROOM_GREAT_USD) score += 2;
-    else if (pricePerRoom <= PRICE_PER_ROOM_OK_USD) score += 1;
-  }
+  let score = 0;
+
+  if (ad.priceUsd <= PRICE_BEST_USD) score += 5;
+  else if (ad.priceUsd <= PRICE_GREAT_USD) score += 4;
+  else if (ad.priceUsd <= PRICE_OK_USD) score += 3;
+  else if (ad.priceUsd <= PRICE_MAX_USD) score += 2;
 
   if (ad.distanceKm != null) {
-    maxScore += 2;
-    if (ad.distanceKm <= CENTER_CLOSE_KM) score += 2;
-    else if (ad.distanceKm <= CENTER_OK_KM) score += 1;
+    if (ad.distanceKm <= CENTER_CLOSE_KM) score += 4;
+    else if (ad.distanceKm <= CENTER_OK_KM) score += 2;
   }
 
-  if (maxScore === 0) return "⚪";
-  const ratio = score / maxScore;
-  if (ratio >= 0.75) return "🟢";
-  if (ratio >= 0.25) return "🟡";
+  if (ad.rooms != null) {
+    if (ad.rooms >= 2) score += 1;
+    else if (ad.rooms === 1) score += 0.5;
+  }
+
+  return score;
+}
+
+export function classifyHotness(ad: AdDetails): "🟢" | "🟡" | "🔴" | "⚪" {
+  const score = calculateHotnessScore(ad);
+  if (score == null) return "⚪";
+  if (score >= 7) return "🟢";
+  if (score >= 4) return "🟡";
   return "🔴";
+}
+
+function formatNumber(value: number, maximumFractionDigits: number): string {
+  const fixed = value.toFixed(maximumFractionDigits);
+  return fixed.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "").replace(".", ",");
+}
+
+function formatExchangeRate(value: number): string {
+  return value.toFixed(2).replace(".", ",");
+}
+
+export function formatShortAddress(address: string | null): string {
+  if (!address) return "не указан";
+
+  const redundantParts = new Set([
+    "гомель",
+    "г. гомель",
+    "гомельская область",
+    "беларусь",
+    "республика беларусь",
+  ]);
+  const shortAddress = address
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part.length > 0 && !redundantParts.has(part.toLowerCase()))
+    .join(", ");
+
+  return shortAddress || address;
 }
 
 export function formatAdMessage(ad: AdDetails): string {
   const circle = classifyHotness(ad);
-  const parts: string[] = [];
+  let price: string;
   if (ad.priceByn != null && ad.priceUsd != null) {
-    parts.push(`${ad.priceByn.toFixed(0)}р(${ad.priceUsd.toFixed(0)}$)`);
+    price = `${formatNumber(ad.priceByn, 0)} BYN (${formatNumber(ad.priceUsd, 0)} USD)`;
   } else if (ad.priceByn != null) {
-    parts.push(`${ad.priceByn.toFixed(0)}р`);
+    price = `${formatNumber(ad.priceByn, 0)} BYN`;
   } else if (ad.priceUsd != null) {
-    parts.push(`${ad.priceUsd.toFixed(0)}$`);
+    price = `${formatNumber(ad.priceUsd, 0)} USD`;
   } else {
-    parts.push("цена не указана");
+    price = "не указана";
   }
-  if (ad.rooms != null) parts.push(`${ad.rooms} комн.`);
-  if (ad.distanceKm != null) parts.push(`${ad.distanceKm.toFixed(1)} км до центра`);
 
-  const lines = [`${circle} ${parts.join(", ")}`];
-  if (ad.address) lines.push(ad.address);
+  const rate =
+    ad.exchangeRateBynPerUsd != null
+      ? `[1$ = ${formatExchangeRate(ad.exchangeRateBynPerUsd)}Б (по курсу Куфара)]`
+      : "";
+
+  const lines = [`${circle} Цена: ${price}`];
+  if (rate) lines.push(rate);
+  lines.push(`Адрес: ${formatShortAddress(ad.address)}`);
+  lines.push(`Кол-во комнат: ${ad.rooms ?? "не указано"}`);
+  lines.push(
+    `Расстояние до Центра: ${
+      ad.distanceKm != null ? `${formatNumber(ad.distanceKm, 1)} км` : "не рассчитано"
+    }`
+  );
   lines.push(ad.link);
   return lines.join("\n");
 }

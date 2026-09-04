@@ -25,6 +25,9 @@ id = "8a39304eed8f4d44bda2f3c1edae581b"
 SEARCH_URL = "https://re.kufar.by/l/gomel/snyat/kvartiru?cur=USD&size=30"
 MAX_SEEN_IDS = "800"
 
+[secrets]
+required = ["TELEGRAM_BOT_TOKEN", "ADMIN_TOKEN"]
+
 # Secrets (NOT stored here — set via `wrangler secret put`):
 #   TELEGRAM_BOT_TOKEN  — Telegram bot token
 #   ADMIN_TOKEN         — required as ?token=... on every request (see
