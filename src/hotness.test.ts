@@ -66,23 +66,21 @@ test("formatAdMessage uses a readable multiline layout with Kufar's rate", () =>
       exchangeRateBynPerUsd: 650 / 211.09,
       rooms: 2,
       distanceKm: 2.7,
-      address: "Ильича ул, 85, Гомель",
+      address: "Ильича & Ко <дом>, 85, Гомель",
     })
   );
-  assert.match(msg, /^🟡 Цена: 650 BYN \(211 USD\)$/m);
-  assert.match(msg, /^\[1\$ = 3,08Б \(по курсу Куфара\)\]$/m);
-  assert.match(msg, /^Адрес: Ильича ул, 85$/m);
-  assert.match(msg, /^Кол-во комнат: 2$/m);
-  assert.match(msg, /^Расстояние до Центра: 2,7 км$/m);
-  assert.match(msg, /^https:\/\/re\.kufar\.by\/vi\/1$/m);
+  assert.match(msg, /^🟡 <b>650 BYN \(211 USD\)<\/b>$/m);
+  assert.match(msg, /^💱 <i>1\$ = 3,08 BYN · курс Kufar<\/i>$/m);
+  assert.match(msg, /^📍 <b>Ильича &amp; Ко &lt;дом&gt;, 85<\/b>$/m);
+  assert.match(msg, /^🏠 2 комнаты · 2,7 км до Центра$/m);
+  assert.match(msg, /^🔗 <a href="https:\/\/re\.kufar\.by\/vi\/1">Открыть объявление<\/a>$/m);
 });
 
 test("formatAdMessage has readable fallbacks when rich data is missing", () => {
   const msg = formatAdMessage(ad());
-  assert.match(msg, /^⚪ Цена: не указана$/m);
-  assert.match(msg, /^Адрес: не указан$/m);
-  assert.match(msg, /^Кол-во комнат: не указано$/m);
-  assert.match(msg, /^Расстояние до Центра: не рассчитано$/m);
+  assert.match(msg, /^⚪ <b>не указана<\/b>$/m);
+  assert.match(msg, /^📍 <b>не указан<\/b>$/m);
+  assert.match(msg, /^🏠 комнаты не указаны · расстояние не рассчитано до Центра$/m);
 });
 
 test("formatShortAddress removes redundant Gomel location parts", () => {

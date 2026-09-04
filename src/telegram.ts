@@ -5,7 +5,13 @@ async function postMessage(env: Env, chatId: string, text: string, replyMarkup?:
   return fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, reply_markup: replyMarkup }),
+    body: JSON.stringify({
+      chat_id: chatId,
+      text,
+      parse_mode: "HTML",
+      link_preview_options: { is_disabled: true },
+      reply_markup: replyMarkup,
+    }),
   });
 }
 

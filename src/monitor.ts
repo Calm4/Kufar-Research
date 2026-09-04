@@ -130,7 +130,8 @@ export function formatReport(result: MonitorResult): string {
     if (result.newIds.length > 0) {
       const details = result.newIds.map((id) => {
         const ad = result.adsById.get(id);
-        return ad ? `${id} — ${formatAdMessage(ad).split("\n")[0]}` : id;
+        const headline = ad ? formatAdMessage(ad).split("\n")[0].replace(/<[^>]+>/g, "") : null;
+        return headline ? `${id} — ${headline}` : id;
       });
       lines.push(`Новые:\n${details.join("\n")}`);
     }

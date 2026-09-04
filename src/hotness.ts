@@ -77,6 +77,24 @@ function formatExchangeRate(value: number): string {
   return value.toFixed(2).replace(".", ",");
 }
 
+function escapeTelegramHtml(value: string): string {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+function escapeTelegramHtmlAttribute(value: string): string {
+  return escapeTelegramHtml(value).replace(/"/g, "&quot;");
+}
+
+function formatRooms(rooms: number | null): string {
+  if (rooms == null) return "комнаты не указаны";
+  const lastTwo = rooms % 100;
+  const last = rooms % 10;
+  if (lastTwo >= 11 && lastTwo <= 14) return `${rooms} комнат`;
+  if (last === 1) return `${rooms} комната`;
+  if (last >= 2 && last <= 4) return `${rooms} комнаты`;
+  return `${rooms} комнат`;
+}
+
 export function formatShortAddress(address: string | null): string {
   if (!address) return "не указан";
 
@@ -109,20 +127,16 @@ export function formatAdMessage(ad: AdDetails): string {
     price = "не указана";
   }
 
-  const rate =
-    ad.exchangeRateBynPerUsd != null
-      ? `[1$ = ${formatExchangeRate(ad.exchangeRateBynPerUsd)}Б (по курсу Куфара)]`
-      : "";
-
-  const lines = [`${circle} Цена: ${price}`];
-  if (rate) lines.push(rate);
-  lines.push(`Адрес: ${formatShortAddress(ad.address)}`);
-  lines.push(`Кол-во комнат: ${ad.rooms ?? "не указано"}`);
+  const lines = [`${circle} <b>${price}</b>`];
+  if (ad.exchangeRateBynPerUsd != null) {
+    lines.push(`💱 <i>1$ = ${formatExchangeRate(ad.exchangeRateBynPerUsd)} BYN · курс Kufar</i>`);
+  }
+  lines.push(`📍 <b>${escapeTelegramHtml(formatShortAddress(ad.address))}</b>`);
   lines.push(
-    `Расстояние до Центра: ${
-      ad.distanceKm != null ? `${formatNumber(ad.distanceKm, 1)} км` : "не рассчитано"
-    }`
+    `🏠 ${formatRooms(ad.rooms)} · ${
+      ad.distanceKm != null ? `${formatNumber(ad.distanceKm, 1)} км` : "расстояние не рассчитано"
+    } до Центра`
   );
-  lines.push(ad.link);
+  lines.push(`🔗 <a href="${escapeTelegramHtmlAttribute(ad.link)}">Открыть объявление</a>`);
   return lines.join("\n");
 }
