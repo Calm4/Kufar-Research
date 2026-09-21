@@ -1,5 +1,12 @@
+import type { CityId } from "./cities";
+import { DEFAULT_CITY_ID, getCity } from "./cities";
+
+export type ListingSourceId = "kufar" | "realt" | "moya";
+
 export interface AdDetails {
   id: string;
+  source: ListingSourceId;
+  cityId: CityId;
   link: string;
   priceUsd: number | null;
   priceByn: number | null;
@@ -7,11 +14,19 @@ export interface AdDetails {
   rooms: number | null;
   address: string | null;
   distanceKm: number | null;
+  photoCount: number;
+  photoUrls: string[];
 }
 
 // Универмаг «Гомель», Советская ул., 60. This is the reference point for
 // both the displayed distance and the location part of the hotness score.
-export const CITY_CENTER = { lat: 52.439338, lng: 31.003331 };
+export const CITY_CENTER = getCity(DEFAULT_CITY_ID).center;
+
+const SOURCE_LABELS: Record<ListingSourceId, string> = {
+  kufar: "Kufar",
+  realt: "Realt",
+  moya: "Moya",
+};
 
 // Hotness is deliberately weighted in this order: price (50%), distance
 // (40%), rooms (10%). The constants are kept here so preferences remain easy
@@ -73,10 +88,6 @@ function formatNumber(value: number, maximumFractionDigits: number): string {
   return fixed.replace(/(\.\d*?)0+$/, "$1").replace(/\.$/, "").replace(".", ",");
 }
 
-function formatExchangeRate(value: number): string {
-  return value.toFixed(2).replace(".", ",");
-}
-
 function escapeTelegramHtml(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
@@ -86,22 +97,37 @@ function escapeTelegramHtmlAttribute(value: string): string {
 }
 
 function formatRooms(rooms: number | null): string {
-  if (rooms == null) return "комнаты не указаны";
-  const lastTwo = rooms % 100;
-  const last = rooms % 10;
-  if (lastTwo >= 11 && lastTwo <= 14) return `${rooms} комнат`;
-  if (last === 1) return `${rooms} комната`;
-  if (last >= 2 && last <= 4) return `${rooms} комнаты`;
-  return `${rooms} комнат`;
+  if (rooms == null) return "не указано";
+  const keycaps: Record<number, string> = {
+    0: "0️⃣",
+    1: "1️⃣",
+    2: "2️⃣",
+    3: "3️⃣",
+    4: "4️⃣",
+    5: "5️⃣",
+    6: "6️⃣",
+    7: "7️⃣",
+    8: "8️⃣",
+    9: "9️⃣",
+  };
+  return keycaps[rooms] ?? String(rooms);
 }
 
-export function formatShortAddress(address: string | null): string {
+export function formatShortAddress(address: string | null, cityId: CityId = DEFAULT_CITY_ID): string {
   if (!address) return "не указан";
 
+  const cityDisplayName = getCity(cityId).name;
+  const cityName = cityDisplayName.toLowerCase();
   const redundantParts = new Set([
-    "гомель",
-    "г. гомель",
+    cityName,
+    `г. ${cityName}`,
     "гомельская область",
+    "минская область",
+    "брестская область",
+    "гродненская область",
+    "витебская область",
+    "могилёвская область",
+    "могилевская область",
     "беларусь",
     "республика беларусь",
   ]);
@@ -109,34 +135,37 @@ export function formatShortAddress(address: string | null): string {
     .split(",")
     .map((part) => part.trim())
     .filter((part) => part.length > 0 && !redundantParts.has(part.toLowerCase()))
-    .join(", ");
+    .join(", ")
+    // Realt sometimes prefixes the city without a separating comma:
+    // "Гомель Артиллерийская ул. 4".
+    .replace(new RegExp(`^(?:г\\.\\s*)?${cityDisplayName}\\s+`, "iu"), "");
 
-  return shortAddress || address;
+  return (shortAddress || address).replace(/(^|[\s,])ул(?=\s*[,\d]|$)/giu, "$1ул.");
 }
 
 export function formatAdMessage(ad: AdDetails): string {
   const circle = classifyHotness(ad);
   let price: string;
   if (ad.priceByn != null && ad.priceUsd != null) {
-    price = `${formatNumber(ad.priceByn, 0)} BYN (${formatNumber(ad.priceUsd, 0)} USD)`;
+    price = `${formatNumber(ad.priceByn, 0)}р (${formatNumber(ad.priceUsd, 0)} USD)`;
   } else if (ad.priceByn != null) {
-    price = `${formatNumber(ad.priceByn, 0)} BYN`;
+    price = `${formatNumber(ad.priceByn, 0)}р`;
   } else if (ad.priceUsd != null) {
     price = `${formatNumber(ad.priceUsd, 0)} USD`;
   } else {
     price = "не указана";
   }
 
-  const lines = [`${circle} <b>${price}</b>`];
-  if (ad.exchangeRateBynPerUsd != null) {
-    lines.push(`💱 <i>1$ = ${formatExchangeRate(ad.exchangeRateBynPerUsd)} BYN · курс Kufar</i>`);
-  }
-  lines.push(`📍 <b>${escapeTelegramHtml(formatShortAddress(ad.address))}</b>`);
+  const lines = [`${circle}[${SOURCE_LABELS[ad.source]}] Цена: <b>${price}</b>`];
+  lines.push(`Адрес: <b>${escapeTelegramHtml(formatShortAddress(ad.address, ad.cityId))}</b>`);
+  lines.push(`Кол-во комнат: ${formatRooms(ad.rooms)}`);
   lines.push(
-    `🏠 ${formatRooms(ad.rooms)} · ${
-      ad.distanceKm != null ? `${formatNumber(ad.distanceKm, 1)} км` : "расстояние не рассчитано"
-    } до Центра`
+    `Расстояние до Центра: ${
+      ad.distanceKm != null ? `${formatNumber(ad.distanceKm, 1)} км` : "не рассчитано"
+    }`
   );
-  lines.push(`🔗 <a href="${escapeTelegramHtmlAttribute(ad.link)}">Открыть объявление</a>`);
+  lines.push("");
+  lines.push(`📸 Фотографий: ${ad.photoCount > 0 ? ad.photoCount : "нет"}`);
+  lines.push(`<a href="${escapeTelegramHtmlAttribute(ad.link)}">Ссылка на объявление</a>`);
   return lines.join("\n");
 }

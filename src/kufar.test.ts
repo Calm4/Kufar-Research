@@ -21,6 +21,10 @@ const sampleAd = {
     { currency: "USD", price: 10000 },
     { currency: "BYN", price: 30000 },
   ],
+  images: [
+    { id: "0000", media_storage: "rms", path: "adim1/first-photo.jpg", yams_storage: false },
+    { id: "0000", media_storage: "rms", path: "adim1/second-photo.webp", yams_storage: false },
+  ],
 };
 
 test("extractAds parses a real-shaped __NEXT_DATA__ payload", () => {
@@ -35,6 +39,11 @@ test("extractAds parses a real-shaped __NEXT_DATA__ payload", () => {
   assert.equal(ad?.exchangeRateBynPerUsd, 3);
   assert.equal(ad?.address, "3-я Авиационная ул, 9, Гомель");
   assert.ok(ad?.distanceKm !== null && ad!.distanceKm! < 1);
+  assert.equal(ad?.photoCount, 2);
+  assert.deepEqual(ad?.photoUrls, [
+    "https://rms.kufar.by/v1/list_thumbs_2x/adim1/first-photo.jpg",
+    "https://rms.kufar.by/v1/list_thumbs_2x/adim1/second-photo.webp",
+  ]);
 });
 
 test("extractAds treats price: 0 ('Договорная') as no price, not $0", () => {
@@ -71,6 +80,8 @@ test("extractAds falls back to regex when __NEXT_DATA__ is missing", () => {
   assert.ok(ads.has("234567"));
   assert.equal(ads.get("123456")?.priceUsd, null);
   assert.equal(ads.get("123456")?.exchangeRateBynPerUsd, null);
+  assert.equal(ads.get("123456")?.photoCount, 0);
+  assert.deepEqual(ads.get("123456")?.photoUrls, []);
 });
 
 test("extractAds treats Kufar's zero-price placeholders as missing prices", () => {

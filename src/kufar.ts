@@ -1,5 +1,7 @@
 import type { AdDetails } from "./hotness";
-import { haversineKm, CITY_CENTER } from "./hotness";
+import { haversineKm } from "./hotness";
+import type { CityId } from "./cities";
+import { DEFAULT_CITY_ID, getCity } from "./cities";
 
 // Matches ad links like:
 //   /vi/gomel/snyat/kvartiru/123456
@@ -39,7 +41,24 @@ function getParamValue(params: unknown, key: string): unknown {
   return found ? (found as Record<string, unknown>).v : null;
 }
 
-function buildAdDetails(ad: Record<string, unknown>): AdDetails {
+function extractPhotoData(images: unknown): { photoCount: number; photoUrls: string[] } {
+  if (!Array.isArray(images)) return { photoCount: 0, photoUrls: [] };
+
+  const photoUrls = images
+    .map((image) => {
+      if (!image || typeof image !== "object") return null;
+      const item = image as Record<string, unknown>;
+      if (item.media_storage !== "rms" || typeof item.path !== "string") return null;
+      const path = item.path.replace(/^\/+/, "");
+      if (!/^adim\d+\/[a-z0-9-]+\.(?:jpe?g|png|webp)$/i.test(path)) return null;
+      return `https://rms.kufar.by/v1/list_thumbs_2x/${path}`;
+    })
+    .filter((url): url is string => url !== null);
+
+  return { photoCount: images.length, photoUrls: [...new Set(photoUrls)] };
+}
+
+function buildAdDetails(ad: Record<string, unknown>, cityId: CityId): AdDetails {
   const id = String(ad.ad_id);
 
   const roomsRaw = getParamValue(ad.ad_parameters, "rooms");
@@ -78,11 +97,16 @@ function buildAdDetails(ad: Record<string, unknown>): AdDetails {
 
   let distanceKm: number | null = null;
   if (Array.isArray(coords) && coords.length === 2) {
-    distanceKm = haversineKm(CITY_CENTER.lat, CITY_CENTER.lng, coords[1], coords[0]);
+    const center = getCity(cityId).center;
+    distanceKm = haversineKm(center.lat, center.lng, coords[1], coords[0]);
   }
+
+  const { photoCount, photoUrls } = extractPhotoData(ad.images);
 
   return {
     id,
+    source: "kufar",
+    cityId,
     link: (ad.ad_link as string) || `https://re.kufar.by/vi/${id}`,
     priceUsd,
     priceByn,
@@ -90,10 +114,12 @@ function buildAdDetails(ad: Record<string, unknown>): AdDetails {
     rooms,
     address: address || null,
     distanceKm,
+    photoCount,
+    photoUrls,
   };
 }
 
-function extractAdsFromNextData(html: string): Map<string, AdDetails> | null {
+function extractAdsFromNextData(html: string, cityId: CityId): Map<string, AdDetails> | null {
   const match = html.match(/<script id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/i);
   if (!match) return null;
   let parsed: unknown;
@@ -108,15 +134,15 @@ function extractAdsFromNextData(html: string): Map<string, AdDetails> | null {
   const byId = new Map<string, AdDetails>();
   for (const ad of adsArray) {
     if (ad && typeof ad === "object" && (ad as Record<string, unknown>).ad_id != null) {
-      const details = buildAdDetails(ad as Record<string, unknown>);
+      const details = buildAdDetails(ad as Record<string, unknown>, cityId);
       if (!byId.has(details.id)) byId.set(details.id, details);
     }
   }
   return byId;
 }
 
-export function extractAds(html: string): Map<string, AdDetails> {
-  const rich = extractAdsFromNextData(html);
+export function extractAds(html: string, cityId: CityId = DEFAULT_CITY_ID): Map<string, AdDetails> {
+  const rich = extractAdsFromNextData(html, cityId);
   if (rich && rich.size > 0) return rich;
 
   // Fallback: id/link only, no price/rooms/address/distance.
@@ -127,6 +153,8 @@ export function extractAds(html: string): Map<string, AdDetails> {
     if (!byId.has(id)) {
       byId.set(id, {
         id,
+        source: "kufar",
+        cityId,
         link: `https://re.kufar.by${path}`,
         priceUsd: null,
         priceByn: null,
@@ -134,6 +162,8 @@ export function extractAds(html: string): Map<string, AdDetails> {
         rooms: null,
         address: null,
         distanceKm: null,
+        photoCount: 0,
+        photoUrls: [],
       });
     }
   }

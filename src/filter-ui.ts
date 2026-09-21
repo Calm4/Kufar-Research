@@ -1,4 +1,6 @@
 import type { Subscriber } from "./subscribers";
+import { subscriberCityId } from "./subscribers";
+import { CITIES, getCity } from "./cities";
 
 export interface InlineButton {
   text: string;
@@ -18,6 +20,7 @@ export const FILTERS_BUTTON = "🔍 Фильтры";
 export const CLEAR_FILTERS_BUTTON = "♻️ Сбросить фильтры";
 export const SUBSCRIBE_BUTTON = "🔔 Подписаться на уведомления";
 export const UNSUBSCRIBE_BUTTON = "🔕 Отписаться от уведомлений";
+export const CITY_BUTTON_PREFIX = "🏙 Город:";
 
 // The menu's top button is one toggle, not two separate ones — its label
 // (and what tapping it does) depends on whether the subscriber currently
@@ -89,7 +92,24 @@ export function describeFilters(s: Subscriber): string {
 }
 
 export function filtersMessageText(s: Subscriber): string {
-  return `Фильтры:\n\n${describeFilters(s)}`;
+  return `Город: ${getCity(subscriberCityId(s)).name}\n\nФильтры:\n\n${describeFilters(s)}`;
+}
+
+export function cityMessageText(s: Subscriber): string {
+  return `Выберите город для поиска.\n\nСейчас: ${getCity(subscriberCityId(s)).name}`;
+}
+
+export function buildCityKeyboard(subscriber: Subscriber): InlineKeyboard {
+  const selected = subscriberCityId(subscriber);
+  return {
+    inline_keyboard: chunk(
+      CITIES.map((city) => ({
+        text: `${city.id === selected ? "✅ " : ""}${city.name}`,
+        callback_data: `city:${city.id}`,
+      })),
+      2
+    ),
+  };
 }
 
 export function buildFiltersKeyboard(subscriber: Subscriber): InlineKeyboard {
@@ -111,8 +131,9 @@ export function buildFiltersKeyboard(subscriber: Subscriber): InlineKeyboard {
 
 export function mainMenuKeyboard(subscriber: Subscriber | null): ReplyKeyboard {
   const toggleButton = isActiveSubscriber(subscriber) ? UNSUBSCRIBE_BUTTON : SUBSCRIBE_BUTTON;
+  const cityName = getCity(subscriber ? subscriberCityId(subscriber) : undefined).name;
   return {
-    keyboard: [[toggleButton], [FILTERS_BUTTON], [CLEAR_FILTERS_BUTTON]],
+    keyboard: [[toggleButton], [`${CITY_BUTTON_PREFIX} ${cityName}`], [FILTERS_BUTTON], [CLEAR_FILTERS_BUTTON]],
     resize_keyboard: true,
   };
 }

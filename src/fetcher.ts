@@ -7,6 +7,33 @@ export interface FetchResult {
   html: string;
 }
 
+const MAX_HTML_BYTES = 5 * 1024 * 1024;
+
+async function readTextLimited(response: Response): Promise<string> {
+  const declaredLength = Number(response.headers.get("Content-Length"));
+  if (Number.isFinite(declaredLength) && declaredLength > MAX_HTML_BYTES) {
+    throw new Error(`Response is too large: ${declaredLength} bytes`);
+  }
+
+  if (!response.body) return "";
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let totalBytes = 0;
+  let text = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > MAX_HTML_BYTES) {
+      await reader.cancel();
+      throw new Error(`Response exceeded ${MAX_HTML_BYTES} bytes`);
+    }
+    text += decoder.decode(value, { stream: true });
+  }
+  return text + decoder.decode();
+}
+
 export async function fetchSearchHtml(searchUrl: string): Promise<FetchResult> {
   const res = await fetch(searchUrl, {
     headers: {
@@ -21,6 +48,6 @@ export async function fetchSearchHtml(searchUrl: string): Promise<FetchResult> {
     // Cloudflare Workers-specific fetch() extension (see @cloudflare/workers-types).
     cf: { cacheTtl: 0, cacheEverything: false },
   });
-  const html = await res.text();
+  const html = await readTextLimited(res);
   return { status: res.status, html };
 }

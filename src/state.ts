@@ -1,7 +1,18 @@
 import type { Env } from "./env";
+import type { CityId } from "./cities";
+import type { ListingSourceId } from "./hotness";
 
-export async function getSeenIds(kv: KVNamespace): Promise<string[] | null> {
-  const raw = await kv.get("seen_ids");
+export const LEGACY_SEEN_IDS_KEY = "seen_ids";
+
+export function seenIdsKey(source: ListingSourceId, cityId: CityId): string {
+  return `seen_ids:${source}:${cityId}`;
+}
+
+export async function getSeenIds(
+  kv: KVNamespace,
+  key = LEGACY_SEEN_IDS_KEY
+): Promise<string[] | null> {
+  const raw = await kv.get(key);
   if (raw === null) return null; // never run before
   try {
     const parsed = JSON.parse(raw);
@@ -11,9 +22,25 @@ export async function getSeenIds(kv: KVNamespace): Promise<string[] | null> {
   }
 }
 
-export async function saveSeenIds(kv: KVNamespace, ids: string[], maxSeenIds: number): Promise<void> {
+export async function saveSeenIds(
+  kv: KVNamespace,
+  ids: string[],
+  maxSeenIds: number,
+  key = LEGACY_SEEN_IDS_KEY
+): Promise<void> {
   const trimmed = ids.slice(-maxSeenIds);
-  await kv.put("seen_ids", JSON.stringify(trimmed));
+  await kv.put(key, JSON.stringify(trimmed));
+}
+
+export interface FeedRunStatus {
+  source: ListingSourceId;
+  cityId: CityId;
+  status: number;
+  foundCount: number;
+  newCount: number;
+  firstRun: boolean;
+  blocked: boolean;
+  error?: string;
 }
 
 export interface RunStatus {
@@ -25,6 +52,7 @@ export interface RunStatus {
   blocked: boolean;
   telegramErrorCount: number;
   subscriberCount: number;
+  feeds?: FeedRunStatus[];
 }
 
 // Written on every run (success or blocked) so `/status` always reflects

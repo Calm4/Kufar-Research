@@ -3,8 +3,17 @@ import { fetchSearchHtml } from "./fetcher";
 import { extractDebugInfo } from "./kufar";
 import { formatDebugReport } from "./debug";
 import { runMonitor, formatReport } from "./monitor";
-import { getSeenIds, getLastRunStatus, isAuthorized } from "./state";
+import {
+  getSeenIds,
+  getLastRunStatus,
+  isAuthorized,
+  seenIdsKey,
+  LEGACY_SEEN_IDS_KEY,
+} from "./state";
 import { handleTelegramWebhook } from "./telegram-webhook";
+import { DEFAULT_CITY_ID, getCity, parseCity } from "./cities";
+import { getFeedsForCity, SOURCE_PRESENTATION } from "./sources";
+import type { ListingSourceId } from "./hotness";
 
 function unauthorized(): Response {
   return new Response("401 Unauthorized — missing or wrong ?token=\n", {
@@ -47,6 +56,13 @@ export default {
           `Найдено: ${lastRun.foundCount}, новых: ${lastRun.newCount}, firstRun: ${lastRun.firstRun}`,
           `Ошибок Telegram: ${lastRun.telegramErrorCount}`,
           `Подписчиков: ${lastRun.subscriberCount}`,
+          ...(lastRun.feeds ?? []).map((feed) => {
+            const source = SOURCE_PRESENTATION[feed.source];
+            const city = getCity(feed.cityId).name;
+            return `${source.icon} ${source.label} · ${city}: найдено ${feed.foundCount}, новых ${feed.newCount}${
+              feed.blocked ? `, ошибка ${feed.error ?? feed.status}` : ""
+            }`;
+          }),
         ].join("\n")
       );
     }
@@ -58,13 +74,25 @@ export default {
     const resetLastParam = url.searchParams.get("resetLast");
     if (resetLastParam !== null) {
       const n = Math.max(1, Number(resetLastParam) || 5);
-      const seenIds = (await getSeenIds(env.KUFAR_KV)) ?? [];
+      const requestedSource = url.searchParams.get("source") ?? "kufar";
+      if (!(requestedSource in SOURCE_PRESENTATION)) return text("Неизвестный source.", 400);
+      const source = requestedSource as ListingSourceId;
+      const city = parseCity(url.searchParams.get("city") ?? DEFAULT_CITY_ID);
+      if (!city) return text("Неизвестный city.", 400);
+      let key = seenIdsKey(source, city.id);
+      let storedIds = await getSeenIds(env.KUFAR_KV, key);
+      if (storedIds === null && source === "kufar" && city.id === "gomel") {
+        key = LEGACY_SEEN_IDS_KEY;
+        storedIds = await getSeenIds(env.KUFAR_KV, key);
+      }
+      const seenIds = storedIds ?? [];
       const removed = seenIds.slice(-n);
       const remaining = seenIds.slice(0, Math.max(0, seenIds.length - n));
-      await env.KUFAR_KV.put("seen_ids", JSON.stringify(remaining));
+      await env.KUFAR_KV.put(key, JSON.stringify(remaining));
       return text(
         [
-          `Удалено из seen_ids: ${removed.length}`,
+          `Лента: ${source}:${city.id}`,
+          `Удалено из ${key}: ${removed.length}`,
           removed.join(", ") || "(база была пуста)",
           "",
           `Осталось в базе: ${remaining.length}`,
@@ -76,7 +104,9 @@ export default {
     }
 
     if (url.searchParams.get("debug") === "1") {
-      const { status, html } = await fetchSearchHtml(env.SEARCH_URL);
+      const city = parseCity(url.searchParams.get("city") ?? DEFAULT_CITY_ID) ?? getCity(DEFAULT_CITY_ID);
+      const kufarFeed = getFeedsForCity(city.id).find((feed) => feed.source === "kufar")!;
+      const { status, html } = await fetchSearchHtml(kufarFeed.url);
       if (status !== 200) {
         return text(`HTTP статус: ${status}\n\n${html.slice(0, 2000)}`);
       }

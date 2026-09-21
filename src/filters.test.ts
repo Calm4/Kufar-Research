@@ -7,6 +7,8 @@ import type { Subscriber } from "./subscribers";
 function ad(overrides: Partial<AdDetails> = {}): AdDetails {
   return {
     id: "1",
+    source: "kufar",
+    cityId: "gomel",
     link: "https://re.kufar.by/vi/1",
     priceUsd: null,
     priceByn: null,
@@ -14,6 +16,8 @@ function ad(overrides: Partial<AdDetails> = {}): AdDetails {
     rooms: null,
     address: null,
     distanceKm: null,
+    photoCount: 0,
+    photoUrls: [],
     ...overrides,
   };
 }

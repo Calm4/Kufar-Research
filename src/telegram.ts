@@ -1,6 +1,21 @@
 import type { Env } from "./env";
+import type { AdDetails } from "./hotness";
+import { formatAdMessage } from "./hotness";
 
-async function postMessage(env: Env, chatId: string, text: string, replyMarkup?: unknown): Promise<Response> {
+interface LinkPreviewOptions {
+  is_disabled?: boolean;
+  url?: string;
+  prefer_large_media?: boolean;
+  show_above_text?: boolean;
+}
+
+async function postMessage(
+  env: Env,
+  chatId: string,
+  text: string,
+  replyMarkup?: unknown,
+  linkPreviewOptions: LinkPreviewOptions = { is_disabled: true }
+): Promise<Response> {
   const url = `https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`;
   return fetch(url, {
     method: "POST",
@@ -9,7 +24,7 @@ async function postMessage(env: Env, chatId: string, text: string, replyMarkup?:
       chat_id: chatId,
       text,
       parse_mode: "HTML",
-      link_preview_options: { is_disabled: true },
+      link_preview_options: linkPreviewOptions,
       reply_markup: replyMarkup,
     }),
   });
@@ -22,11 +37,12 @@ export async function sendTelegramMessage(
   env: Env,
   chatId: string,
   text: string,
-  replyMarkup?: unknown
+  replyMarkup?: unknown,
+  linkPreviewOptions?: LinkPreviewOptions
 ): Promise<void> {
-  let res = await postMessage(env, chatId, text, replyMarkup);
+  let res = await postMessage(env, chatId, text, replyMarkup, linkPreviewOptions);
   if (!res.ok) {
-    res = await postMessage(env, chatId, text, replyMarkup);
+    res = await postMessage(env, chatId, text, replyMarkup, linkPreviewOptions);
   }
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -46,6 +62,37 @@ export async function broadcastTelegramMessage(
   for (const chatId of chatIds) {
     try {
       await sendTelegramMessage(env, chatId, text);
+    } catch (err) {
+      errors.push(err instanceof Error ? err.message : String(err));
+    }
+  }
+  return errors;
+}
+
+async function sendTelegramListing(env: Env, chatId: string, ad: AdDetails): Promise<void> {
+  const linkPreviewOptions: LinkPreviewOptions = ad.photoUrls.length
+    ? {
+        url: ad.link,
+        prefer_large_media: true,
+        show_above_text: false,
+      }
+    : { is_disabled: true };
+
+  // A silent Telegram message can still create a separate push entry. Keep
+  // each listing to one sendMessage call and let Telegram render Kufar's link
+  // preview, so the notification always contains the useful text card.
+  await sendTelegramMessage(env, chatId, formatAdMessage(ad), undefined, linkPreviewOptions);
+}
+
+export async function broadcastTelegramListing(
+  env: Env,
+  chatIds: string[],
+  ad: AdDetails
+): Promise<string[]> {
+  const errors: string[] = [];
+  for (const chatId of chatIds) {
+    try {
+      await sendTelegramListing(env, chatId, ad);
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
     }

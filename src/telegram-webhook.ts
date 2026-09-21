@@ -1,8 +1,11 @@
 import type { Env } from "./env";
 import { addSubscriber, getSubscriber, updateSubscriber } from "./subscribers";
+import { parseCity } from "./cities";
 import { sendTelegramMessage, answerCallbackQuery, editMessageText } from "./telegram";
 import {
   buildFiltersKeyboard,
+  buildCityKeyboard,
+  cityMessageText,
   describeFilters,
   filtersMessageText,
   findPriceBucketByKey,
@@ -12,6 +15,7 @@ import {
   CLEAR_FILTERS_BUTTON,
   SUBSCRIBE_BUTTON,
   UNSUBSCRIBE_BUTTON,
+  CITY_BUTTON_PREFIX,
 } from "./filter-ui";
 
 interface TelegramUpdate {
@@ -65,10 +69,35 @@ async function handleCommand(env: Env, chatId: string, text: string): Promise<Co
     const s = await getSubscriber(env.KUFAR_KV, chatId);
     return {
       text: changed
-        ? "Подписка активна — сюда будут приходить новые объявления с Kufar.\n\n" +
-          "Настроить фильтры можно кнопкой «🔍 Фильтры» внизу, либо командами /price и /rooms."
+        ? "Подписка активна — сюда будут приходить новые объявления с Kufar, Realt и «Моя реклама».\n\n" +
+          "Город и фильтры можно настроить кнопками внизу."
         : "Вы уже подписаны. Кнопка «🔍 Фильтры» внизу — посмотреть/изменить фильтры.",
       markup: mainMenuKeyboard(s),
+    };
+  }
+
+  if (text.startsWith(CITY_BUTTON_PREFIX)) {
+    const s = await getSubscriber(env.KUFAR_KV, chatId);
+    if (!s) return { text: "Вы ещё не подписаны — нажмите /start.", markup: mainMenuKeyboard(null) };
+    return { text: cityMessageText(s), markup: buildCityKeyboard(s) };
+  }
+
+  if (text.startsWith("/city")) {
+    const value = text.replace(/^\/city(@\S+)?\s*/i, "").trim();
+    const existing = await getSubscriber(env.KUFAR_KV, chatId);
+    if (!existing) return { text: "Вы ещё не подписаны — нажмите /start.", markup: mainMenuKeyboard(null) };
+    if (!value) return { text: cityMessageText(existing), markup: buildCityKeyboard(existing) };
+    const city = parseCity(value);
+    if (!city) {
+      return {
+        text: "Не узнал город. Доступны: Минск, Гомель, Брест, Гродно, Витебск и Могилёв.",
+        markup: buildCityKeyboard(existing),
+      };
+    }
+    const updated = await updateSubscriber(env.KUFAR_KV, chatId, { cityId: city.id });
+    return {
+      text: `Город сохранён: ${city.name}. Текущие объявления будут приняты за базовые без лишней рассылки.`,
+      markup: mainMenuKeyboard(updated),
     };
   }
 
@@ -137,7 +166,7 @@ async function handleCommand(env: Env, chatId: string, text: string): Promise<Co
 
   const s = await getSubscriber(env.KUFAR_KV, chatId);
   return {
-    text: "Команды: /start, /stop, /price 100-300, /rooms 1,2, /filters, /clearfilters — или кнопки внизу.",
+    text: "Команды: /start, /stop, /city Гомель, /price 100-300, /rooms 1,2, /filters, /clearfilters — или кнопки внизу.",
     markup: mainMenuKeyboard(s),
   };
 }
@@ -155,6 +184,7 @@ async function handleCallbackQuery(
     return;
   }
   const chatIdStr = String(chatId);
+  let panel: "filters" | "city" = "filters";
 
   if (data === "reset") {
     await updateSubscriber(env.KUFAR_KV, chatIdStr, { priceRanges: undefined, rooms: undefined });
@@ -180,12 +210,22 @@ async function handleCallbackQuery(
         await updateSubscriber(env.KUFAR_KV, chatIdStr, { priceRanges: next.length > 0 ? next : undefined });
       }
     }
+  } else if (data.startsWith("city:")) {
+    const city = parseCity(data.slice("city:".length));
+    if (city) {
+      await updateSubscriber(env.KUFAR_KV, chatIdStr, { cityId: city.id });
+      panel = "city";
+    }
   }
 
   const updated = (await getSubscriber(env.KUFAR_KV, chatIdStr)) ?? { chatId: chatIdStr };
   await answerCallbackQuery(env, callbackQuery.id);
   try {
-    await editMessageText(env, chatIdStr, messageId, filtersMessageText(updated), buildFiltersKeyboard(updated));
+    if (panel === "city") {
+      await editMessageText(env, chatIdStr, messageId, cityMessageText(updated), buildCityKeyboard(updated));
+    } else {
+      await editMessageText(env, chatIdStr, messageId, filtersMessageText(updated), buildFiltersKeyboard(updated));
+    }
   } catch {
     // Filter state is already saved; a failed panel refresh isn't worth
     // failing the webhook response over.

@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  buildCityKeyboard,
   buildFiltersKeyboard,
   describeFilters,
   findPriceBucketByKey,
@@ -110,4 +111,15 @@ test("mainMenuKeyboard: shows the subscribe button again once paused (active: fa
   const labels = kb.keyboard.flat();
   assert.ok(labels.includes(SUBSCRIBE_BUTTON));
   assert.ok(!labels.includes(UNSUBSCRIBE_BUTTON));
+});
+
+test("buildCityKeyboard marks the selected city", () => {
+  const keyboard = buildCityKeyboard(sub({ cityId: "brest" })).inline_keyboard.flat();
+  assert.equal(keyboard.length, 6);
+  assert.match(keyboard.find((button) => button.callback_data === "city:brest")!.text, /^✅/);
+  assert.doesNotMatch(keyboard.find((button) => button.callback_data === "city:gomel")!.text, /^✅/);
+});
+
+test("mainMenuKeyboard shows the selected city", () => {
+  assert.ok(mainMenuKeyboard(sub({ cityId: "vitebsk" })).keyboard.flat().includes("🏙 Город: Витебск"));
 });

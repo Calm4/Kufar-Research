@@ -1,3 +1,6 @@
+import type { CityId } from "./cities";
+import { CITIES, DEFAULT_CITY_ID } from "./cities";
+
 export interface PriceRange {
   min?: number;
   max?: number;
@@ -8,6 +11,7 @@ export interface Subscriber {
   // Undefined/true = receiving notifications; false = paused via the
   // subscribe/unsubscribe toggle, filters kept for when they turn it back on.
   active?: boolean;
+  cityId?: CityId;
   priceRanges?: PriceRange[];
   rooms?: number[];
 }
@@ -39,10 +43,17 @@ function normalize(raw: unknown): Subscriber[] {
     }
     if (Array.isArray(e.rooms)) subscriber.rooms = e.rooms as number[];
     if (typeof e.active === "boolean") subscriber.active = e.active;
+    if (typeof e.cityId === "string" && CITIES.some((city) => city.id === e.cityId)) {
+      subscriber.cityId = e.cityId as CityId;
+    }
 
     result.push(subscriber);
   }
   return result;
+}
+
+export function subscriberCityId(subscriber: Subscriber): CityId {
+  return subscriber.cityId ?? DEFAULT_CITY_ID;
 }
 
 export async function getSubscribers(kv: KVNamespace): Promise<Subscriber[]> {
@@ -72,7 +83,7 @@ export async function addSubscriber(kv: KVNamespace, chatId: string): Promise<bo
   const subscribers = await getSubscribers(kv);
   const idx = subscribers.findIndex((s) => s.chatId === chatId);
   if (idx < 0) {
-    await saveSubscribers(kv, [...subscribers, { chatId }]);
+    await saveSubscribers(kv, [...subscribers, { chatId, cityId: DEFAULT_CITY_ID }]);
     return true;
   }
   if (subscribers[idx].active === false) {
